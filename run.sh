@@ -7,4 +7,5 @@ python main.py --model_path meta-llama/Meta-Llama-3-8B \
                       --layers_to_skip 1 \
                       --dataset_size 4000 \
                       --dataset_column question \
-                      --dataset_subset "all" 
+                      --dataset_subset "all" \
+                      --split auxiliary_train \

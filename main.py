@@ -1,15 +1,15 @@
-import argparse
 import csv
 import logging
 import os
+from parser import parse_args
 from typing import List
 
 import numpy as np
 import torch
-from datasets import load_dataset
-from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from data import get_dataloader
 
 logging.basicConfig(level=logging.INFO)
 
@@ -56,19 +56,6 @@ def get_last_non_padded_tokens(hidden_states, attention_mask) -> List[torch.Tens
     return last_non_padded_hidden_states
 
 
-class CustomDataset(Dataset):
-    def __init__(self, hf_dataset, dataset_column: str):
-        self.dataset = hf_dataset
-        self.dataset_column = dataset_column
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        item = self.dataset[idx]
-        return item[self.dataset_column]
-
-
 def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -86,17 +73,7 @@ def main(args):
 
     model.eval()
 
-    dataset = load_dataset(
-        args.dataset_name, args.dataset_subset, split=args.dataset_subset
-    )
-    if args.dataset_size:
-        dataset = dataset.select(range(args.dataset_size))
-
-    torch_dataset = CustomDataset(dataset, args.dataset_column)
-
-    dataloader = DataLoader(
-        torch_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True
-    )
+    dataloader = get_dataloader(args)
 
     # Initialize a list to store distances for each block across the dataset
     all_distances = [
@@ -168,46 +145,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run model analysis.")
-    parser.add_argument(
-        "--model_path", type=str, required=True, help="Path to the model."
-    )
-    parser.add_argument(
-        "--dataset_name", type=str, required=True, help="Name of the dataset."
-    )
-    parser.add_argument(
-        "--batch_size", type=int, required=True, help="Batch size for processing."
-    )
-    parser.add_argument(
-        "--max_length",
-        type=int,
-        required=True,
-        help="Maximum length of the tokenized input.",
-    )
-    parser.add_argument(
-        "--layers_to_skip", type=int, required=True, help="Number of layers to skip."
-    )
-    parser.add_argument(
-        "--dataset_column",
-        type=str,
-        required=True,
-        help="The specific column of the dataset to use.",
-    )
-    parser.add_argument(
-        "--dataset_size",
-        type=int,
-        help="Optional argument to specify the size of the dataset.",
-    )
-    parser.add_argument(
-        "--dataset_subset",
-        type=str,
-        default="eval",
-        help="Subset of the dataset to use (e.g., 'train', 'eval').",
-    )
-    parser.add_argument(
-        "--device", type=str, help="Device to run the model on ('cpu', 'cuda')."
-    )
-
-    args = parser.parse_args()
-
-    main(args)
+    main(parse_args())
