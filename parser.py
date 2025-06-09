@@ -18,7 +18,9 @@ def parse_args():
         required=True,
         help="Maximum length of the tokenized input.",
     )
-    parser.add_argument("--layers_to_skip", type=int, help="Number of layers to skip.")
+    parser.add_argument(
+        "--layers_to_skip", type=int, default=0, help="Number of layers to skip."
+    )
     parser.add_argument(
         "--dataset_column",
         type=str,
@@ -42,5 +44,11 @@ def parse_args():
     )
     parser.add_argument(
         "--device", type=str, help="Device to run the model on ('cpu', 'cuda')."
+    )
+    parser.add_argument(
+        "--revision",
+        type=str,
+        default="main",
+        help="Revision of the model to use (if applicable).",
     )
     return parser.parse_args()

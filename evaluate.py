@@ -1,17 +1,12 @@
+import json
+import os
 from parser import parse_args
 
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from data import get_dataloader
-
-
-def generate_text(input_text):
-    input_ids = tokenizer.encode(input_text, return_tensors="pt")
-    output = model.generate(input_ids, max_length=50, num_return_sequences=1)
-    generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
-    return generated_text
+from main import load_model_and_tokenizer
 
 
 def collate_fn(batch):
@@ -21,7 +16,7 @@ def collate_fn(batch):
     }
 
 
-def evaluate(model, tokenizer, dataloader):
+def evaluate(model, tokenizer, dataloader, args):
     correct = 0
     total = 0
 
@@ -60,7 +55,21 @@ def evaluate(model, tokenizer, dataloader):
             total += 1
 
     accuracy = correct / total if total > 0 else 0
+
     print(f"Accuracy: {accuracy:.2%}")
+
+    os.makedirs("results", exist_ok=True)
+    output_info = {
+        "model_path": args.model_path,
+        "layers_to_skip": args.layers_to_skip,
+        "accuracy": accuracy,
+        "total": total,
+        "correct": correct,
+    }
+    model_name = os.path.basename(os.path.dirname(args.model_path))
+    output_file = f"results/{model_name}_{args.layers_to_skip}.json"
+    with open(output_file, "w") as f:
+        json.dump(output_info, f, indent=2)
 
 
 if __name__ == "__main__":
@@ -68,13 +77,5 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     dataloader = get_dataloader(args, collate_fn=collate_fn)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_path,
-        device_map="auto",
-    )
-    model.eval()
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
-    tokenizer.padding_side = "left"
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    evaluate(model, tokenizer, dataloader)
+    model, tokenizer = load_model_and_tokenizer(args)
+    evaluate(model, tokenizer, dataloader, args)

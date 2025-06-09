@@ -56,29 +56,32 @@ def get_last_non_padded_tokens(hidden_states, attention_mask) -> List[torch.Tens
     return last_non_padded_hidden_states
 
 
-def main(args):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
+def load_model_and_tokenizer(args):
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
+        revision=args.revision,
         use_safetensors=True,
         device_map="auto",
         torch_dtype=torch.float16,
     )
-
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
-
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path, revision=args.revision)
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
-
     model.eval()
+    return model, tokenizer
+
+
+def main(args):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model, tokenizer = load_model_and_tokenizer(args)
 
     dataloader = get_dataloader(args)
+    num_layers = model.config.num_hidden_layers
+    num_dropped_layers = args.layers_to_skip
 
     # Initialize a list to store distances for each block across the dataset
-    all_distances = [
-        [] for _ in range(model.config.num_hidden_layers - args.layers_to_skip)
-    ]
+    all_distances = [[] for _ in range(num_layers - num_dropped_layers)]
 
     for batch in tqdm(dataloader, desc="Processing batches"):
         inputs = tokenizer(
@@ -108,7 +111,7 @@ def main(args):
 
         # Compute distances and append to all_distances
         distances = compute_block_distances(
-            last_non_padded_hidden_states, args.layers_to_skip
+            last_non_padded_hidden_states, num_dropped_layers
         )
         for i, distance in enumerate(distances):
             all_distances[i].append(distance)
@@ -119,8 +122,14 @@ def main(args):
     min_distance = float("inf")
     min_distance_layer = 0
 
+    model_name = os.path.basename(args.model_path)
     os.makedirs("outputs", exist_ok=True)
-    with open("outputs/layer_distances.csv", "w", newline="") as csvfile:
+    os.makedirs(f"outputs/{model_name}", exist_ok=True)
+    with open(
+        f"outputs/{model_name}/prune_{num_dropped_layers}_layers.csv",
+        "w",
+        newline="",
+    ) as csvfile:
         fieldnames = ["block_start", "block_end", "average_distance"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -128,7 +137,7 @@ def main(args):
             writer.writerow(
                 {
                     "block_start": i + 1,  # layer indices are 1-based in the paper
-                    "block_end": i + 1 + args.layers_to_skip,
+                    "block_end": i + 1 + num_dropped_layers,
                     "average_distance": avg_dist,
                 }
             )
@@ -139,9 +148,11 @@ def main(args):
 
     # Log the layer with the minimum average distance
     logging.info(
-        f"Layer {min_distance_layer} to {min_distance_layer + args.layers_to_skip} has the minimum average distance of {min_distance}. Consider examining this layer more closely for potential optimization or removal."
+        f"Layer {min_distance_layer} to {min_distance_layer + num_dropped_layers} has the minimum average distance of {min_distance}. Consider examining this layer more closely for potential optimization or removal."
     )
-    logging.info("Layer distances written to layer_distances.csv")
+    logging.info(
+        f"Layer distances written to {model_name}_drop_{num_dropped_layers}_layers.csv"
+    )
 
 
 if __name__ == "__main__":
