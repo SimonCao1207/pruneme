@@ -17,16 +17,30 @@ if [ -z "$method" ]; then
 fi
 
 # To run this script, use: bash run_evaluate_prunned.sh --method <METHOD>
+# for model in "${model_list[@]}"; do
+#     for i in {1..7}; do
+#         python evaluate.py --model_path "merged/${model}/${method}/${i}" \
+#             --model_name "${model}" \
+#             --method "$method" \
+#             --layers_to_skip $i \
+#             --dataset_name cais/mmlu \
+#             --batch_size 8 \
+#             --max_length 1024 \
+#             --dataset_subset "all" \
+#             --split test
+#     done
+# done
+
 for model in "${model_list[@]}"; do
     for i in {1..7}; do
         python evaluate.py --model_path "merged/${model}/${method}/${i}" \
             --model_name "${model}" \
-            --method "$method" \
+            --revision pico-epoch_0 \
             --layers_to_skip $i \
-            --dataset_name cais/mmlu \
+            --dataset_size 1280 \
+            --dataset_name pico-lm/pretokenized-dolma \
             --batch_size 8 \
             --max_length 1024 \
-            --dataset_subset "all" \
-            --split test
+            --split train
     done
 done
