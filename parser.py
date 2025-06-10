@@ -7,6 +7,12 @@ def parse_args():
         "--model_path", type=str, required=True, help="Path to the model."
     )
     parser.add_argument(
+        "--model_name",
+        type=str,
+        default=None,
+        help="(Optional) Model name for logging purposes.",
+    )
+    parser.add_argument(
         "--dataset_name", type=str, required=True, help="Name of the dataset."
     )
     parser.add_argument(
@@ -50,5 +56,12 @@ def parse_args():
         type=str,
         default="main",
         help="Revision of the model to use (if applicable).",
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="normal",
+        choices=["normal", "similarity-based"],
+        help="Method to determine layers to prune. ",
     )
     return parser.parse_args()

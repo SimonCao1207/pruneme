@@ -47,18 +47,32 @@ if __name__ == "__main__":
         default="pico-epoch_0",
         help="Model revision (optional).",
     )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="normal",
+        choices=["normal", "similarity-based"],
+        help="Method to determine layers to prune. ",
+    )
     args = parser.parse_args()
-    prune_layers_info = get_prune_layers(args)
 
-    # layer_range is half open in mergekit (https://github.com/arcee-ai/mergekit/issues/206)
-    # Skip layers block_start to block_end-1
-    first_block = [0, prune_layers_info["block_start"]]
-    second_block = [prune_layers_info["block_end"], args.num_layers]
-    blocks = [first_block, second_block]
+    if args.method == "normal":
+        first_block = [0, args.num_layers - args.layers_to_skip]
+        second_block = [
+            args.num_layers - args.layers_to_skip,
+            args.num_layers - args.layers_to_skip,
+        ]  # empty block
+        blocks = [first_block, second_block]
+    elif args.method == "similarity-based":
+        # layer_range is half open in mergekit (https://github.com/arcee-ai/mergekit/issues/206)
+        # Skip layers block_start to block_end-1
+        prune_layers_info = get_prune_layers(args)
+        first_block = [0, prune_layers_info["block_start"]]
+        second_block = [prune_layers_info["block_end"], args.num_layers]
+        blocks = [first_block, second_block]
 
     with open(CONFIG_YML, "r", encoding="utf-8") as fp:
         config = yaml.safe_load(fp)
-        prune_layers_info = get_prune_layers(args)
         for i, slice_item in enumerate(config.get("slices", [])):
             for model_info in slice_item.get("sources", []):
                 model_info["model"]["model"]["path"] = args.model_path
@@ -73,6 +87,7 @@ if __name__ == "__main__":
         out_path=os.path.join(
             OUTPUT_PATH,
             os.path.basename(args.model_path),
+            args.method,
             str(args.layers_to_skip),
         ),
         options=MergeOptions(

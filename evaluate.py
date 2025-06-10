@@ -70,8 +70,16 @@ def evaluate(model, tokenizer, dataloader, args):
         "total": total,
         "correct": correct,
     }
-    model_name = os.path.basename(os.path.dirname(args.model_path))
-    output_file = f"results/{model_name}_{args.layers_to_skip}.json"
+    if args.model_name:
+        model_name = args.model_name
+    else:
+        model_name = os.path.basename(os.path.dirname(args.model_path))
+
+    if args.layers_to_skip > 0:
+        output_file = f"results/{args.method}/{model_name}_{args.layers_to_skip}.json"
+    else:
+        output_file = f"results/{model_name}.json"
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(output_info, f, indent=2)
 
