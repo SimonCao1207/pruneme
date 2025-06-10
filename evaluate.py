@@ -128,7 +128,7 @@ def evaluate_pico(model, tokenizer, dataloader, args):
 
     print(f"Model path: {args.model_path}")
     if args.method == "prune-one":
-        assert args.prune_layer is not None:
+        assert args.prune_layer is not None
         print(f"Pruning layer: {args.prune_layer}")
         output_info.update({"prune_layer": args.prune_layer})
         output_file = f"results/pico/prune-one/{model_name}_{args.prune_layer}.json"

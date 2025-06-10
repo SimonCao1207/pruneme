@@ -53,6 +53,7 @@ for model in "${model_list[@]}"; do
     for i in {0..7}; do
         python evaluate.py --model_path "merged/${model}/${method}/${i}" \
             --model_name "${model}" \
+            --method prune-one \
             --revision pico-epoch_0 \
             --layers_to_skip 1 \
             --prune_layer $i \
