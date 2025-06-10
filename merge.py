@@ -50,7 +50,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     prune_layers_info = get_prune_layers(args)
     first_block = [0, prune_layers_info["block_start"] - 1]
-    second_block = [prune_layers_info["block_end"], args.num_layers]
+    second_block = [prune_layers_info["block_end"], args.num_layers - 1]
     blocks = [first_block, second_block]
 
     with open(CONFIG_YML, "r", encoding="utf-8") as fp:
