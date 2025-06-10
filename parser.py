@@ -61,7 +61,7 @@ def parse_args():
         "--method",
         type=str,
         default="normal",
-        choices=["normal", "similarity-based"],
+        choices=["normal", "similarity-based", "prune-one"],
         help="Method to determine layers to prune. ",
     )
     parser.add_argument(
