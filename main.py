@@ -136,19 +136,22 @@ def main(args):
         for i, avg_dist in enumerate(average_distances):
             writer.writerow(
                 {
-                    "block_start": i + 1,  # layer indices are 1-based in the paper
-                    "block_end": i + 1 + num_dropped_layers,
+                    "block_start": i,
+                    "block_end": i + num_dropped_layers,
                     "average_distance": avg_dist,
                 }
             )
 
             if avg_dist < min_distance:
                 min_distance = avg_dist
-                min_distance_layer = i + 1
+                min_distance_layer = i
 
     # Log the layer with the minimum average distance
     logging.info(
-        f"Layer {min_distance_layer} to {min_distance_layer + num_dropped_layers} has the minimum average distance of {min_distance}. Consider examining this layer more closely for potential optimization or removal."
+        f"Layer {min_distance_layer} to {min_distance_layer + num_dropped_layers} has the minimum average distance of {min_distance}."
+    )
+    logging.info(
+        f"Consider prunning layer {min_distance_layer} to {min_distance_layer + num_dropped_layers - 1}"
     )
     logging.info(
         f"Layer distances written to {model_name}_drop_{num_dropped_layers}_layers.csv"

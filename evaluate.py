@@ -28,7 +28,9 @@ def evaluate(model, tokenizer, dataloader, args):
             prompts,
             return_tensors="pt",
             padding=True,
-        ).to(model.device)
+        )
+        for k in inputs:
+            inputs[k] = inputs[k].to(model.device)
 
         options = ["A", "B", "C", "D"]
 
@@ -56,6 +58,8 @@ def evaluate(model, tokenizer, dataloader, args):
 
     accuracy = correct / total if total > 0 else 0
 
+    print(f"Model path: {args.model_path}")
+    print(f"Layers to skip: {args.layers_to_skip}")
     print(f"Accuracy: {accuracy:.2%}")
 
     os.makedirs("results", exist_ok=True)

@@ -49,8 +49,11 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     prune_layers_info = get_prune_layers(args)
-    first_block = [0, prune_layers_info["block_start"] - 1]
-    second_block = [prune_layers_info["block_end"], args.num_layers - 1]
+
+    # layer_range is half open in mergekit (https://github.com/arcee-ai/mergekit/issues/206)
+    # Skip layers block_start to block_end-1
+    first_block = [0, prune_layers_info["block_start"]]
+    second_block = [prune_layers_info["block_end"], args.num_layers]
     blocks = [first_block, second_block]
 
     with open(CONFIG_YML, "r", encoding="utf-8") as fp:
