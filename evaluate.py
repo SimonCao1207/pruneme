@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from parser import parse_args
 
@@ -8,15 +9,11 @@ from tqdm import tqdm
 from data import get_dataloader
 from main import load_model_and_tokenizer
 
-
-def collate_fn(batch):
-    return {
-        "prompts": [x["prompt"] for x in batch],
-        "answers": [x["answer"] for x in batch],
-    }
+torch.cuda.empty_cache()
 
 
-def evaluate(model, tokenizer, dataloader, args):
+def evaluate_mmlu(model, tokenizer, dataloader, args):
+    model.eval()
     correct = 0
     total = 0
 
@@ -76,18 +73,87 @@ def evaluate(model, tokenizer, dataloader, args):
         model_name = os.path.basename(os.path.dirname(args.model_path))
 
     if args.layers_to_skip > 0:
-        output_file = f"results/{args.method}/{model_name}_{args.layers_to_skip}.json"
+        output_file = (
+            f"results/mmlu/{args.method}/{model_name}_{args.layers_to_skip}.json"
+        )
     else:
-        output_file = f"results/{model_name}.json"
+        output_file = f"results/mmlu/{model_name}.json"
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(output_info, f, indent=2)
 
 
+def evaluate_pico(model, tokenizer, dataloader, args):
+    model.eval()
+    total_loss = 0.0
+    total_tokens = 0
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Evaluating PICO"):
+            input_ids = batch["input_ids"].to(model.device)
+            attention_mask = batch.get("attention_mask", None)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(model.device)
+
+            labels = input_ids.clone()
+            outputs = model(
+                input_ids=input_ids, attention_mask=attention_mask, labels=labels
+            )
+            loss = outputs.loss
+
+            if tokenizer.pad_token_id is not None:
+                num_tokens = (labels != tokenizer.pad_token_id).sum().item()
+            else:
+                num_tokens = labels.numel()
+
+            total_loss += loss.item() * num_tokens
+            total_tokens += num_tokens
+
+    avg_loss = total_loss / total_tokens
+    perplexity = math.exp(avg_loss)
+
+    print(f"Model path: {args.model_path}")
+    print(f"Layers to skip: {args.layers_to_skip}")
+    print(f"Perplexity: {perplexity:.4f}")
+
+    # Prepare output dictionary
+    output_info = {
+        "model_path": args.model_path,
+        "layers_to_skip": args.layers_to_skip,
+        "perplexity": perplexity,
+        "total_tokens": total_tokens,
+        "average_loss": avg_loss,
+    }
+
+    # Determine model name for filename
+    if hasattr(args, "model_name") and args.model_name:
+        model_name = args.model_name
+    else:
+        model_name = os.path.basename(os.path.dirname(args.model_path))
+
+    # Construct output file path similar to evaluate_mmlu
+    if args.layers_to_skip > 0:
+        output_file = (
+            f"results/pico/{args.method}/{model_name}_{args.layers_to_skip}.json"
+        )
+    else:
+        output_file = f"results/pico/{model_name}.json"
+
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    with open(output_file, "w") as f:
+        json.dump(output_info, f, indent=2)
+
+    return perplexity
+
+
 if __name__ == "__main__":
     args = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, tokenizer = load_model_and_tokenizer(args, device)
 
-    dataloader = get_dataloader(args, collate_fn=collate_fn)
-    model, tokenizer = load_model_and_tokenizer(args)
-    evaluate(model, tokenizer, dataloader, args)
+    dataloader = get_dataloader(args)
+    if args.dataset_name == "cais/mmlu":
+        evaluate_mmlu(model, tokenizer, dataloader, args)
+    elif args.dataset_name == "pico-lm/pretokenized-dolma":
+        evaluate_pico(model, tokenizer, dataloader, args)

@@ -56,25 +56,24 @@ def get_last_non_padded_tokens(hidden_states, attention_mask) -> List[torch.Tens
     return last_non_padded_hidden_states
 
 
-def load_model_and_tokenizer(args):
+def load_model_and_tokenizer(args, device):
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
-        revision=args.revision,
-        use_safetensors=True,
-        device_map="auto",
         torch_dtype=torch.float16,
+        revision=args.revision,
     )
+    model.to(device)
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, revision=args.revision)
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
-    model.eval()
     return model, tokenizer
 
 
 def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model, tokenizer = load_model_and_tokenizer(args)
+    model, tokenizer = load_model_and_tokenizer(args, device)
+    model.eval()
 
     dataloader = get_dataloader(args)
     num_layers = model.config.num_hidden_layers
