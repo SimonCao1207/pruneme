@@ -51,8 +51,14 @@ if __name__ == "__main__":
         "--method",
         type=str,
         default="normal",
-        choices=["normal", "similarity-based"],
+        choices=["normal", "similarity-based", "prune-one"],
         help="Method to determine layers to prune. ",
+    )
+    parser.add_argument(
+        "--prune_layer",
+        default=None,
+        type=int,
+        help="Which layer to prune (for prune-one method).",
     )
     args = parser.parse_args()
 
@@ -62,14 +68,19 @@ if __name__ == "__main__":
             args.num_layers - args.layers_to_skip,
             args.num_layers - args.layers_to_skip,
         ]  # empty block
-        blocks = [first_block, second_block]
     elif args.method == "similarity-based":
         # layer_range is half open in mergekit (https://github.com/arcee-ai/mergekit/issues/206)
         # Skip layers block_start to block_end-1
         prune_layers_info = get_prune_layers(args)
         first_block = [0, prune_layers_info["block_start"]]
         second_block = [prune_layers_info["block_end"], args.num_layers]
-        blocks = [first_block, second_block]
+    elif args.method == "prune-one":
+        layer = args.prune_layer
+        assert layer is not None
+        first_block = [0, layer]
+        second_block = [layer + 1, args.num_layers]
+
+    blocks = [first_block, second_block]
 
     with open(CONFIG_YML, "r", encoding="utf-8") as fp:
         config = yaml.safe_load(fp)
@@ -82,13 +93,19 @@ if __name__ == "__main__":
         merge_config = MergeConfiguration.model_validate(config)
         print(merge_config)
 
+    file_name = (
+        str(args.prune_layer)
+        if args.method == "prune-one"
+        else str(args.layers_to_skip)
+    )
+
     run_merge(
         merge_config,
         out_path=os.path.join(
             OUTPUT_PATH,
             os.path.basename(args.model_path),
             args.method,
-            str(args.layers_to_skip),
+            file_name,
         ),
         options=MergeOptions(
             lora_merge_cache=LORA_MERGE_CACHE,

@@ -112,14 +112,9 @@ def evaluate_pico(model, tokenizer, dataloader, args):
     avg_loss = total_loss / total_tokens
     perplexity = math.exp(avg_loss)
 
-    print(f"Model path: {args.model_path}")
-    print(f"Layers to skip: {args.layers_to_skip}")
-    print(f"Perplexity: {perplexity:.4f}")
-
     # Prepare output dictionary
     output_info = {
         "model_path": args.model_path,
-        "layers_to_skip": args.layers_to_skip,
         "perplexity": perplexity,
         "total_tokens": total_tokens,
         "average_loss": avg_loss,
@@ -131,13 +126,23 @@ def evaluate_pico(model, tokenizer, dataloader, args):
     else:
         model_name = os.path.basename(os.path.dirname(args.model_path))
 
-    # Construct output file path similar to evaluate_mmlu
-    if args.layers_to_skip > 0:
-        output_file = (
-            f"results/pico/{args.method}/{model_name}_{args.layers_to_skip}.json"
-        )
+    print(f"Model path: {args.model_path}")
+    if args.method == "prune-one":
+        assert args.prune_layer is not None:
+        print(f"Pruning layer: {args.prune_layer}")
+        output_info.update({"prune_layer": args.prune_layer})
+        output_file = f"results/pico/prune-one/{model_name}_{args.prune_layer}.json"
     else:
-        output_file = f"results/pico/{model_name}.json"
+        print(f"Layers to skip: {args.layers_to_skip}")
+        output_info.update({"layers_to_skip": args.layers_to_skip})
+        # Construct output file path similar to evaluate_mmlu
+        if args.layers_to_skip > 0:
+            output_file = (
+                f"results/pico/{args.method}/{model_name}_{args.layers_to_skip}.json"
+            )
+        else:
+            output_file = f"results/pico/{model_name}.json"
+    print(f"Perplexity: {perplexity:.4f}")
 
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 

@@ -64,4 +64,10 @@ def parse_args():
         choices=["normal", "similarity-based"],
         help="Method to determine layers to prune. ",
     )
+    parser.add_argument(
+        "--prune_layer",
+        default=None,
+        type=int,
+        help="Which layer to prune (for prune-one method).",
+    )
     return parser.parse_args()
