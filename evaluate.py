@@ -5,11 +5,24 @@ from parser import parse_args
 
 import torch
 from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from data import get_dataloader
-from main import load_model_and_tokenizer
 
 torch.cuda.empty_cache()
+
+
+def load_model_and_tokenizer(args, device):
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_path,
+        torch_dtype=torch.bfloat16,
+        revision=args.revision,
+    )
+    model.to(device)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path, revision=args.revision)
+    if not tokenizer.pad_token:
+        tokenizer.pad_token = tokenizer.eos_token
+    return model, tokenizer
 
 
 def evaluate_mmlu(model, tokenizer, dataloader, args):

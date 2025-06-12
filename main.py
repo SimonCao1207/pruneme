@@ -7,9 +7,9 @@ from typing import List
 import numpy as np
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from data import get_dataloader
+from evaluate import load_model_and_tokenizer
 
 logging.basicConfig(level=logging.INFO)
 
@@ -54,19 +54,6 @@ def get_last_non_padded_tokens(hidden_states, attention_mask) -> List[torch.Tens
             batch_last_tokens.append(last_token.unsqueeze(0))
         last_non_padded_hidden_states.append(torch.cat(batch_last_tokens, dim=0))
     return last_non_padded_hidden_states
-
-
-def load_model_and_tokenizer(args, device):
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_path,
-        torch_dtype=torch.float16,
-        revision=args.revision,
-    )
-    model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path, revision=args.revision)
-    if not tokenizer.pad_token:
-        tokenizer.pad_token = tokenizer.eos_token
-    return model, tokenizer
 
 
 def main(args):
