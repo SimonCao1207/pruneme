@@ -12,11 +12,15 @@
 #         --split auxiliary_train
 # done
 
-python main.py --model_path huzama/Vanilla-3.2-8L \
-    --model_name Vanilla-3.2-8L \
-    --revision pico-epoch_0 \
-    --dataset_size 1280 \
-    --dataset_name pico-lm/pretokenized-dolma \
-    --batch_size 8 \
-    --max_length 1024 \
-    --split train
+model_list=("VirtualFormer-3.2-8L", "VirtualSkip-3.2-8L", "Vanilla-3.2-8L")
+
+for model in "${model_list[@]}"; do
+    python main.py --model_path huzama/${model} \
+        --model_name ${model} \
+        --revision pico-epoch_0 \
+        --dataset_size 1280 \
+        --dataset_name pico-lm/pretokenized-dolma \
+        --batch_size 8 \
+        --max_length 1024 \
+        --split train
+done

@@ -20,10 +20,15 @@ np.random.seed(42)
 
 def angular_distance(x_l, x_l_plus_n) -> torch.Tensor:
     """Compute the angular distance between layer output tokens."""
+    cosine_similarity = compute_cosine_similarity(x_l, x_l_plus_n)
+    return torch.acos(cosine_similarity.clamp(min=-1, max=1)) / torch.pi
+
+
+def compute_cosine_similarity(x_l, x_l_plus_n) -> torch.Tensor:
+    """Compute the cosine similarity between layer output tokens."""
     x_l_norm = x_l / torch.norm(x_l, dim=-1, keepdim=True)
     x_l_plus_n_norm = x_l_plus_n / torch.norm(x_l_plus_n, dim=-1, keepdim=True)
-    cosine_similarity = (x_l_norm * x_l_plus_n_norm).sum(-1)
-    return torch.acos(cosine_similarity.clamp(min=-1, max=1)) / torch.pi
+    return (x_l_norm * x_l_plus_n_norm).sum(-1)
 
 
 def compute_block_distances(
@@ -46,7 +51,9 @@ def layer_importance(
     hidden_states: List[torch.Tensor], attention_mask: torch.Tensor
 ) -> List[float]:
     """
-    Calculate the importance of each layer based on mean angular distances between consecutive layers.
+    Calculate the importance of each layer based on the mean angular distance
+    between the hidden states of the last token before and after each layer.
+
     Returns a list of importances (higher distance = higher importance).
     """
     last_non_padded_hidden_states = get_last_non_padded_tokens(
@@ -92,7 +99,6 @@ def compute_and_save_layer_distances(
     tokenizer,
     dataloader,
     args,
-    get_last_non_padded_tokens,
     compute_block_distances,
 ):
     num_layers = model.config.num_hidden_layers
@@ -121,7 +127,7 @@ def compute_and_save_layer_distances(
         # This adjustment is necessary for analyses focusing on the model's internal transformations
         last_non_padded_hidden_states = last_non_padded_hidden_states[1:]
 
-        # Ensure that the length of last_non_padded_hidden_states matches the number of model hidden layers minus one
+        # Ensure that the length of last_non_padded_hidden_states matches the number of model hidden layers
         assert len(last_non_padded_hidden_states) == model.config.num_hidden_layers, (
             "Length of last_non_padded_hidden_states  \
         does not match expected number of hidden layers."
@@ -219,7 +225,7 @@ def compute_and_save_layer_importance(
         writer = csv.writer(csvfile)
         writer.writerow(["Layer", "Importance"])
         for i, importance in enumerate(average_importances):
-            writer.writerow([i, importance])
+            writer.writerow([i + 2, importance])  # 1-based indexing for layers
 
     logging.info(f"Layer importance saved to {model_name}_layer_importance.csv")
 
@@ -237,7 +243,6 @@ def main(args):
     #     tokenizer,
     #     dataloader,
     #     args,
-    #     get_last_non_padded_tokens,
     #     compute_block_distances,
     # )
     compute_and_save_layer_importance(
