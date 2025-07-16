@@ -23,3 +23,9 @@ uv run python prune.py
 uv run python evaluate.py
 ```
 
+## Run tests
+- Note: make sure prunned model is saved in `merged/Vanilla-3.2-8L/prune-one/6`
+```bash
+uv run pytest tests --disable-warnings
+```
+

@@ -1,6 +1,7 @@
 import csv
 import logging
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -137,7 +138,7 @@ def compute_and_save_layer_distances(
     min_distance = float("inf")
     min_distance_layer = 0
 
-    model_name = os.path.basename(config.model_path)
+    model_name = os.path.basename(Path(config.model_path))
     os.makedirs("outputs", exist_ok=True)
     os.makedirs(f"outputs/{model_name}", exist_ok=True)
     out_file = f"outputs/{model_name}/prune_{num_layers_to_skip}_layers.csv"

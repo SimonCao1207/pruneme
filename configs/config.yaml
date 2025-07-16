@@ -7,7 +7,5 @@ revision: pico-epoch_0
 batch_size: 8
 max_length: 2048
 device: cuda
-# num_layers_to_skip: 3
-# method : similarity-based
 prune_layer: 6
 method : prune-one

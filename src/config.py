@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 @dataclass
 class Config:
     # Model config
-    model_path: Path = Path()
+    model_path: str = "huzama/Vanilla-3.2-8L"
     model_name: str | None = None
     num_layers: int = 8
 

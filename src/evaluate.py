@@ -1,7 +1,6 @@
 import json
 import math
 import os
-from pathlib import Path
 
 import torch
 from tqdm import tqdm
@@ -91,12 +90,12 @@ def evaluate_pico(model, tokenizer, dataloader, config: Config):
     return perplexity
 
 
-def _get_pruned_model_path(config: Config) -> Path:
+def _get_pruned_model_path(config: Config) -> str:
     if config.method == "prune-one":
         assert config.prune_layer is not None
-        return Path(f"merged/{os.path.basename(config.model_path)}/prune-one/{config.prune_layer}")
+        return f"merged/{os.path.basename(config.model_path)}/prune-one/{config.prune_layer}"
     else:
-        return Path(f"merged/{os.path.basename(config.model_path)}/{config.method}/{config.num_layers_to_skip}")
+        return f"merged/{os.path.basename(config.model_path)}/{config.method}/{config.num_layers_to_skip}"
 
 
 if __name__ == "__main__":

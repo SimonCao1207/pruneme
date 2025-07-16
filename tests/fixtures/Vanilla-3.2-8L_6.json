@@ -1,7 +1,0 @@
-{
-  "model_path": "merged/Vanilla-3.2-8L/prune-one/6",
-  "perplexity": 28.29084756826966,
-  "total_tokens": 2622720,
-  "average_loss": 3.3425383448600767,
-  "prune_layer": 6
-}
