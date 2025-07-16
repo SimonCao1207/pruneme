@@ -1,16 +1,15 @@
 import csv
 import logging
 import os
+from parser import parse_args
+from typing import List
 
 import numpy as np
 import torch
 from tqdm import tqdm
 
-from config import Config, load_cfg
 from data import get_dataloader
 from evaluate import load_model_and_tokenizer
-
-main_config = "configs/config.yaml"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -32,35 +31,51 @@ def compute_cosine_similarity(x_l, x_l_plus_n) -> torch.Tensor:
     return (x_l_norm * x_l_plus_n_norm).sum(-1)
 
 
-def compute_block_distances(hidden_states: list[torch.Tensor], layers_to_skip: int) -> list[float]:
+def compute_block_distances(
+    hidden_states: List[torch.Tensor], layers_to_skip: int
+) -> List[float]:
     """Compute and return angular distances for each block of layers."""
     distances = []
     num_layers = len(hidden_states)
     for l in range(num_layers - layers_to_skip):
-        block_distance = angular_distance(hidden_states[l], hidden_states[l + layers_to_skip]).mean().item()
+        block_distance = (
+            angular_distance(hidden_states[l], hidden_states[l + layers_to_skip])
+            .mean()
+            .item()
+        )
         distances.append(block_distance)
     return distances
 
 
-def layer_importance(hidden_states: list[torch.Tensor], attention_mask: torch.Tensor) -> list[float]:
+def layer_importance(
+    hidden_states: List[torch.Tensor], attention_mask: torch.Tensor
+) -> List[float]:
     """
     Calculate the importance of each layer based on the mean angular distance
     between the hidden states of the last token before and after each layer.
 
     Returns a list of importances (higher distance = higher importance).
     """
-    last_non_padded_hidden_states = get_last_non_padded_tokens(hidden_states, attention_mask)
+    last_non_padded_hidden_states = get_last_non_padded_tokens(
+        hidden_states, attention_mask
+    )
     # Remove first layer (embedding layer)
     last_non_padded_hidden_states = last_non_padded_hidden_states[1:]
     num_layers = len(last_non_padded_hidden_states)
     importances = []
     for l in range(num_layers - 1):
-        dist = angular_distance(last_non_padded_hidden_states[l], last_non_padded_hidden_states[l + 1]).mean().item()
+        dist = (
+            angular_distance(
+                last_non_padded_hidden_states[l], last_non_padded_hidden_states[l + 1]
+            )
+            .mean()
+            .item()
+        )
         importances.append(dist)
     return importances
 
 
-def get_last_non_padded_tokens(hidden_states, attention_mask) -> list[torch.Tensor]:
+def get_last_non_padded_tokens(hidden_states, attention_mask) -> List[torch.Tensor]:
     """Get last non-padded tokens for each layer."""
     last_non_padded_hidden_states = []
     for layer in hidden_states:
@@ -68,7 +83,9 @@ def get_last_non_padded_tokens(hidden_states, attention_mask) -> list[torch.Tens
         batch_last_tokens = []
         for batch in range(batch_size):
             if attention_mask:
-                last_non_pad_index = attention_mask[batch].nonzero(as_tuple=True)[0].max()
+                last_non_pad_index = (
+                    attention_mask[batch].nonzero(as_tuple=True)[0].max()
+                )
             else:
                 last_non_pad_index = layer[batch].size(0) - 1
             last_token = layer[batch, last_non_pad_index, :]
@@ -102,7 +119,9 @@ def compute_and_save_layer_distances(
             outputs = model(**inputs, output_hidden_states=True)
         attention_mask = inputs["attention_mask"]
         hidden_states = outputs.hidden_states
-        last_non_padded_hidden_states = get_last_non_padded_tokens(hidden_states, attention_mask)
+        last_non_padded_hidden_states = get_last_non_padded_tokens(
+            hidden_states, attention_mask
+        )
 
         # Remove the first element to account for the input layer not being considered a model hidden layer
         # This adjustment is necessary for analyses focusing on the model's internal transformations
@@ -115,7 +134,9 @@ def compute_and_save_layer_distances(
         )
 
         # Compute distances and append to all_distances
-        distances = compute_block_distances(last_non_padded_hidden_states, num_dropped_layers)
+        distances = compute_block_distances(
+            last_non_padded_hidden_states, num_dropped_layers
+        )
         for i, distance in enumerate(distances):
             all_distances[i].append(distance)
 
@@ -153,21 +174,25 @@ def compute_and_save_layer_distances(
     logging.info(
         f"Layer {min_distance_layer} to {min_distance_layer + num_dropped_layers} has the minimum average distance of {min_distance}."
     )
-    logging.info(f"Consider prunning layer {min_distance_layer} to {min_distance_layer + num_dropped_layers - 1}")
-    logging.info(f"Layer distances written to {model_name}_drop_{num_dropped_layers}_layers.csv")
+    logging.info(
+        f"Consider prunning layer {min_distance_layer} to {min_distance_layer + num_dropped_layers - 1}"
+    )
+    logging.info(
+        f"Layer distances written to {model_name}_drop_{num_dropped_layers}_layers.csv"
+    )
 
 
 def compute_and_save_layer_importance(
     model,
     tokenizer,
     dataloader,
-    config: Config,
+    args,
 ):
     """Compute and save layer importance based on angular distances."""
     all_importances = []
 
-    for batch in tqdm(dataloader, desc="Processing batches", len=len(dataloader)):
-        if config.dataset_name == "pico-lm/pretokenized-dolma":
+    for batch in tqdm(dataloader, desc="Processing batches"):
+        if args.dataset_name == "pico-lm/pretokenized-dolma":
             input_ids = batch["input_ids"].to(model.device)
             attention_mask = batch.get("attention_mask", None)
             if attention_mask is not None:
@@ -177,7 +202,7 @@ def compute_and_save_layer_importance(
                 batch,
                 return_tensors="pt",
                 padding="longest",
-                max_length=config.max_length,
+                max_length=args.max_length,
                 truncation=True,
             ).to(model.device)
 
@@ -194,7 +219,7 @@ def compute_and_save_layer_importance(
 
     average_importances = np.mean(all_importances, axis=0)
 
-    model_name = os.path.basename(config.model_path)
+    model_name = os.path.basename(args.model_path)
     os.makedirs("outputs", exist_ok=True)
     with open(f"outputs/{model_name}_layer_importance.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
@@ -205,11 +230,13 @@ def compute_and_save_layer_importance(
     logging.info(f"Layer importance saved to {model_name}_layer_importance.csv")
 
 
-def main(config):
-    model, tokenizer = load_model_and_tokenizer(config)
+def main(args):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model, tokenizer = load_model_and_tokenizer(args, device)
     model.eval()
 
-    dataloader = get_dataloader(config)
+    dataloader = get_dataloader(args)
 
     # compute_and_save_layer_distances(
     #     model,
@@ -222,9 +249,9 @@ def main(config):
         model,
         tokenizer,
         dataloader,
-        config,
+        args,
     )
 
 
 if __name__ == "__main__":
-    main(config=load_cfg(main_config))
+    main(parse_args())

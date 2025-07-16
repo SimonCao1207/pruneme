@@ -1,6 +1,0 @@
-model_path: huzama/Vanilla-3.2-8L
-dataset_name: pico-lm/pretokenized-dolma
-revision: pico-epoch_0
-batch_size: 32
-max_length: 2048
-device: cuda
