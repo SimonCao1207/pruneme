@@ -1,6 +1,6 @@
 #!/bin/bash
 
-model_list=("Vanilla-3.2-8L" "VirtualSkip-3.2-8L")
+model_list=("VirtualFormer-3.2-8L")
 
 # Parse --method argument
 while [[ "$#" -gt 0 ]]; do
@@ -21,7 +21,7 @@ fi
 # For MMLU dataset
 # for model in "${model_list[@]}"; do
 #     for i in {1..7}; do
-#         python evaluate.py --model_path "merged/${model}/${method}/${i}" \
+#         python src/evaluate.py --model_path "merged/${model}/${method}/${i}" \
 #             --model_name "${model}" \
 #             --method "$method" \
 #             --layers_to_skip $i \
@@ -36,7 +36,7 @@ fi
 # For PicoLM dataset
 # for model in "${model_list[@]}"; do
 #     for i in {1..7}; do
-#         python evaluate.py --model_path "merged/${model}/${method}/${i}" \
+#         python src/evaluate.py --model_path "merged/${model}/${method}/${i}" \
 #             --model_name "${model}" \
 #             --revision pico-epoch_0 \
 #             --layers_to_skip $i \
@@ -51,7 +51,7 @@ fi
 # For method prune-one
 for model in "${model_list[@]}"; do
     for i in {0..7}; do
-        python evaluate.py --model_path "merged/${model}/${method}/${i}" \
+        python src/evaluate.py --model_path "merged/${model}/${method}/${i}" \
             --model_name "${model}" \
             --method prune-one \
             --revision pico-epoch_0 \

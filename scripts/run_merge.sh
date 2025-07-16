@@ -15,7 +15,7 @@ fi
 model_list=("Vanilla-3.2-8L" "VirtualSkip-3.2-8L")
 for model in "${model_list[@]}"; do
     for layers_to_skip in {1..7}; do
-        python merge.py \
+        python src/merge.py \
             --model_path "huzama/${model}" \
             --layers_to_skip $layers_to_skip \
             --revision pico-epoch_0 \

@@ -1,25 +1,24 @@
 import json
 import math
 import os
-from parser import parse_args
 
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from config import Config
 from data import get_dataloader
 
 torch.cuda.empty_cache()
 
 
-def load_model_and_tokenizer(args, device):
+def load_model_and_tokenizer(config: Config):
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_path,
+        config.model_path,
         torch_dtype=torch.bfloat16,
-        revision=args.revision,
-    )
-    model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path, revision=args.revision)
+        revision=config.revision,
+    ).to(config.device)
+    tokenizer = AutoTokenizer.from_pretrained(config.model_path, revision=config.revision)
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
@@ -52,9 +51,7 @@ def evaluate_mmlu(model, tokenizer, dataloader, args):
                 pad_token_id=tokenizer.eos_token_id,
             )
 
-        predictions = tokenizer.batch_decode(
-            outputs[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
-        )
+        predictions = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         for pred, ans in zip(predictions, answers):
             pred_letter = pred.strip()[0].upper() if pred.strip() else ""
@@ -86,9 +83,7 @@ def evaluate_mmlu(model, tokenizer, dataloader, args):
         model_name = os.path.basename(os.path.dirname(args.model_path))
 
     if args.layers_to_skip > 0:
-        output_file = (
-            f"results/mmlu/{args.method}/{model_name}_{args.layers_to_skip}.json"
-        )
+        output_file = f"results/mmlu/{args.method}/{model_name}_{args.layers_to_skip}.json"
     else:
         output_file = f"results/mmlu/{model_name}.json"
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -109,9 +104,7 @@ def evaluate_pico(model, tokenizer, dataloader, args):
                 attention_mask = attention_mask.to(model.device)
 
             labels = input_ids.clone()
-            outputs = model(
-                input_ids=input_ids, attention_mask=attention_mask, labels=labels
-            )
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
 
             if tokenizer.pad_token_id is not None:
@@ -150,9 +143,7 @@ def evaluate_pico(model, tokenizer, dataloader, args):
         output_info.update({"layers_to_skip": args.layers_to_skip})
         # Construct output file path similar to evaluate_mmlu
         if args.layers_to_skip > 0:
-            output_file = (
-                f"results/pico/{args.method}/{model_name}_{args.layers_to_skip}.json"
-            )
+            output_file = f"results/pico/{args.method}/{model_name}_{args.layers_to_skip}.json"
         else:
             output_file = f"results/pico/{model_name}.json"
     print(f"Perplexity: {perplexity:.4f}")

@@ -18,13 +18,9 @@ class PicoDataset(IterableDataset):
 class MMLUDataset(Dataset):
     def __init__(self, args):
         self.args = args
-        self.dataset = load_dataset(
-            args.dataset_name, split=args.split, streaming=False
-        )
+        self.dataset = load_dataset(args.dataset_name, split=args.split, streaming=False)
         if args.dataset_size and hasattr(self.dataset, "select"):
-            self.dataset = self.dataset.select(
-                range(min(args.dataset_size, len(self.dataset)))
-            )
+            self.dataset = self.dataset.select(range(min(args.dataset_size, len(self.dataset))))
 
     def __len__(self):
         return len(self.dataset)
@@ -44,9 +40,7 @@ class MMLUDataset(Dataset):
 def collate_fn(batch, args):
     if args.dataset_name == "pico-lm/pretokenized-dolma":
         input_ids_list = [torch.tensor(x["input_ids"]) for x in batch]
-        input_ids = torch.nn.utils.rnn.pad_sequence(
-            input_ids_list, batch_first=True, padding_value=0
-        )
+        input_ids = torch.nn.utils.rnn.pad_sequence(input_ids_list, batch_first=True, padding_value=0)
         return {
             "input_ids": input_ids,  # (batch_size, max_seq_len)
         }
@@ -57,26 +51,26 @@ def collate_fn(batch, args):
         }
 
 
-def get_dataloader(args, collate_fn=collate_fn):
-    if args.dataset_name == "pico-lm/pretokenized-dolma":
-        torch_dataset = PicoDataset(args)
+def get_dataloader(config, collate_fn=collate_fn):
+    if config.dataset_name == "pico-lm/pretokenized-dolma":
+        torch_dataset = PicoDataset(config)
         dataloader = DataLoader(
             torch_dataset,
-            batch_size=args.batch_size,
+            batch_size=config.batch_size,
             shuffle=False,
             drop_last=True,
-            collate_fn=lambda batch: collate_fn(batch, args),
+            collate_fn=lambda batch: collate_fn(batch, config),
             num_workers=0,
         )
-    elif args.dataset_name == "cais/mmlu":
-        torch_dataset = MMLUDataset(args)
+    elif config.dataset_name == "cais/mmlu":
+        torch_dataset = MMLUDataset(config)
         dataloader = DataLoader(
             torch_dataset,
-            batch_size=args.batch_size,
+            batch_size=config.batch_size,
             shuffle=False,
             drop_last=True,
-            collate_fn=lambda batch: collate_fn(batch, args),
+            collate_fn=lambda batch: collate_fn(batch, config),
         )
     else:
-        raise ValueError(f"Unsupported dataset: {args.dataset_name}")
+        raise ValueError(f"Unsupported dataset: {config.dataset_name}")
     return dataloader
