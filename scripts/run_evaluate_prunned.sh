@@ -24,7 +24,7 @@ fi
 #         python src/evaluate.py --model_path "merged/${model}/${method}/${i}" \
 #             --model_name "${model}" \
 #             --method "$method" \
-#             --layers_to_skip $i \
+#             --num_layers_to_skip $i \
 #             --dataset_name cais/mmlu \
 #             --batch_size 8 \
 #             --max_length 1024 \
@@ -39,7 +39,7 @@ fi
 #         python src/evaluate.py --model_path "merged/${model}/${method}/${i}" \
 #             --model_name "${model}" \
 #             --revision pico-epoch_0 \
-#             --layers_to_skip $i \
+#             --num_layers_to_skip $i \
 #             --dataset_size 1280 \
 #             --dataset_name pico-lm/pretokenized-dolma \
 #             --batch_size 8 \
@@ -55,7 +55,7 @@ for model in "${model_list[@]}"; do
             --model_name "${model}" \
             --method prune-one \
             --revision pico-epoch_0 \
-            --layers_to_skip 1 \
+            --num_layers_to_skip 1 \
             --prune_layer $i \
             --dataset_size 1280 \
             --dataset_name pico-lm/pretokenized-dolma \

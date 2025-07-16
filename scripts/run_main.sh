@@ -5,7 +5,7 @@ for l in {1..31}; do
         --dataset_name cais/mmlu \
         --batch_size 8 \
         --max_length 1024 \
-        --layers_to_skip $l \
+        --num_layers_to_skip $l \
         --dataset_size 4000 \
         --dataset_column question \
         --dataset_subset "all" \

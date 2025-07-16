@@ -32,12 +32,14 @@ def compute_cosine_similarity(x_l, x_l_plus_n) -> torch.Tensor:
     return (x_l_norm * x_l_plus_n_norm).sum(-1)
 
 
-def compute_block_distances(hidden_states: list[torch.Tensor], layers_to_skip: int) -> list[float]:
+def compute_block_distances(hidden_states: list[torch.Tensor], num_layers_to_skip: int) -> list[float]:
     """Compute and return angular distances for each block of layers."""
     distances = []
     num_layers = len(hidden_states)
-    for l in range(num_layers - layers_to_skip):
-        block_distance = angular_distance(hidden_states[l], hidden_states[l + layers_to_skip]).mean().item()
+    for layer_ in range(num_layers - num_layers_to_skip):
+        block_distance = (
+            angular_distance(hidden_states[layer_], hidden_states[layer_ + num_layers_to_skip]).mean().item()
+        )
         distances.append(block_distance)
     return distances
 
@@ -54,8 +56,12 @@ def layer_importance(hidden_states: list[torch.Tensor], attention_mask: torch.Te
     last_non_padded_hidden_states = last_non_padded_hidden_states[1:]
     num_layers = len(last_non_padded_hidden_states)
     importances = []
-    for l in range(num_layers - 1):
-        dist = angular_distance(last_non_padded_hidden_states[l], last_non_padded_hidden_states[l + 1]).mean().item()
+    for layer_ in range(num_layers - 1):
+        dist = (
+            angular_distance(last_non_padded_hidden_states[layer_], last_non_padded_hidden_states[layer_ + 1])
+            .mean()
+            .item()
+        )
         importances.append(dist)
     return importances
 
@@ -81,26 +87,32 @@ def compute_and_save_layer_distances(
     model,
     tokenizer,
     dataloader,
-    args,
+    config: Config,
     compute_block_distances,
 ):
     num_layers = model.config.num_hidden_layers
-    num_dropped_layers = args.layers_to_skip
+    num_layers_to_skip = config.num_layers_to_skip
 
     # Initialize a list to store distances for each block across the dataset
-    all_distances = [[] for _ in range(num_layers - num_dropped_layers)]
+    all_distances = [[] for _ in range(num_layers - num_layers_to_skip)]
 
     for batch in tqdm(dataloader, desc="Processing batches"):
-        inputs = tokenizer(
-            batch,
-            return_tensors="pt",
-            padding="longest",
-            max_length=args.max_length,
-            truncation=True,
-        ).to(model.device)
+        if config.dataset_name == "pico-lm/pretokenized-dolma":
+            input_ids = batch["input_ids"].to(model.device)
+            attention_mask = batch.get("attention_mask", None)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(model.device)
+        else:
+            input_ids = tokenizer(
+                batch,
+                return_tensors="pt",
+                padding="longest",
+                max_length=config.max_length,
+                truncation=True,
+            ).to(model.device)
+
         with torch.no_grad():
-            outputs = model(**inputs, output_hidden_states=True)
-        attention_mask = inputs["attention_mask"]
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
         hidden_states = outputs.hidden_states
         last_non_padded_hidden_states = get_last_non_padded_tokens(hidden_states, attention_mask)
 
@@ -115,7 +127,7 @@ def compute_and_save_layer_distances(
         )
 
         # Compute distances and append to all_distances
-        distances = compute_block_distances(last_non_padded_hidden_states, num_dropped_layers)
+        distances = compute_block_distances(last_non_padded_hidden_states, num_layers_to_skip)
         for i, distance in enumerate(distances):
             all_distances[i].append(distance)
 
@@ -125,11 +137,12 @@ def compute_and_save_layer_distances(
     min_distance = float("inf")
     min_distance_layer = 0
 
-    model_name = os.path.basename(args.model_path)
+    model_name = os.path.basename(config.model_path)
     os.makedirs("outputs", exist_ok=True)
     os.makedirs(f"outputs/{model_name}", exist_ok=True)
+    out_file = f"outputs/{model_name}/prune_{num_layers_to_skip}_layers.csv"
     with open(
-        f"outputs/{model_name}/prune_{num_dropped_layers}_layers.csv",
+        out_file,
         "w",
         newline="",
     ) as csvfile:
@@ -140,7 +153,7 @@ def compute_and_save_layer_distances(
             writer.writerow(
                 {
                     "block_start": i,
-                    "block_end": i + num_dropped_layers,
+                    "block_end": i + num_layers_to_skip,
                     "average_distance": avg_dist,
                 }
             )
@@ -149,12 +162,11 @@ def compute_and_save_layer_distances(
                 min_distance = avg_dist
                 min_distance_layer = i
 
-    # Log the layer with the minimum average distance
     logging.info(
-        f"Layer {min_distance_layer} to {min_distance_layer + num_dropped_layers} has the minimum average distance of {min_distance}."
+        f"Layer {min_distance_layer} to {min_distance_layer + num_layers_to_skip} has the minimum average distance of {min_distance}."
     )
-    logging.info(f"Consider prunning layer {min_distance_layer} to {min_distance_layer + num_dropped_layers - 1}")
-    logging.info(f"Layer distances written to {model_name}_drop_{num_dropped_layers}_layers.csv")
+    logging.info(f"Consider prunning layer {min_distance_layer} to {min_distance_layer + num_layers_to_skip - 1}")
+    logging.info(f"Layer distances written to {out_file}")
 
 
 def compute_and_save_layer_importance(
@@ -211,19 +223,21 @@ def main(config):
 
     dataloader = get_dataloader(config)
 
-    # compute_and_save_layer_distances(
-    #     model,
-    #     tokenizer,
-    #     dataloader,
-    #     args,
-    #     compute_block_distances,
-    # )
-    compute_and_save_layer_importance(
-        model,
-        tokenizer,
-        dataloader,
-        config,
-    )
+    if config.method == "similarity-based":
+        compute_and_save_layer_distances(
+            model,
+            tokenizer,
+            dataloader,
+            config,
+            compute_block_distances,
+        )
+    else:
+        compute_and_save_layer_importance(
+            model,
+            tokenizer,
+            dataloader,
+            config,
+        )
 
 
 if __name__ == "__main__":

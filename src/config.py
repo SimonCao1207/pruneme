@@ -7,11 +7,15 @@ from omegaconf import OmegaConf
 
 @dataclass
 class Config:
+    # Model config
     model_path: Path
-    dataset_name: str
-    batch_size: int
-    max_length: int
     model_name: str | None = None
+    num_layers: int = 8
+
+    # Dataset config
+    dataset_name: str = "pico-lm/pretokenized-dolma"
+    batch_size: int = 8
+    max_length: int = 2048
     dataset_column: str | None = None
     dataset_size: int | None = None
     dataset_subset: str = "eval"
@@ -19,11 +23,10 @@ class Config:
     device: str = "cuda"
     revision: str = "main"
 
-
-@dataclass
-class MergeConfig(Config):
+    # Merge config
     method: str = "normal"  # normal | similarity-based | prune-one
-    prune_layer: int | None = None
+    num_layers_to_skip: int = 1
+    prune_layer: int | None = None  # Only used if method is "prune-one"
 
 
 def load_cfg(yaml_path: str | Path) -> Config:
