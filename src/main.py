@@ -166,7 +166,7 @@ def compute_and_save_layer_importance(
     """Compute and save layer importance based on angular distances."""
     all_importances = []
 
-    for batch in tqdm(dataloader, desc="Processing batches", len=len(dataloader)):
+    for batch in tqdm(dataloader, desc="Processing batches"):
         if config.dataset_name == "pico-lm/pretokenized-dolma":
             input_ids = batch["input_ids"].to(model.device)
             attention_mask = batch.get("attention_mask", None)

@@ -2,25 +2,26 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
+from config import Config
+
 
 class PicoDataset(IterableDataset):
-    def __init__(self, args):
-        self.args = args
-        self.dataset = load_dataset(args.dataset_name, split=args.split, streaming=True)
-        if args.dataset_size:
-            self.dataset = self.dataset.take(args.dataset_size)
+    def __init__(self, config: Config):
+        self.args = config
+        self.dataset = load_dataset(config.dataset_name, split=config.split, streaming=True)
+        if config.dataset_size:
+            self.dataset = self.dataset.take(config.dataset_size)
 
     def __iter__(self):
-        for item in self.dataset:
-            yield item
+        yield from self.dataset
 
 
 class MMLUDataset(Dataset):
-    def __init__(self, args):
-        self.args = args
-        self.dataset = load_dataset(args.dataset_name, split=args.split, streaming=False)
-        if args.dataset_size and hasattr(self.dataset, "select"):
-            self.dataset = self.dataset.select(range(min(args.dataset_size, len(self.dataset))))
+    def __init__(self, config: Config):
+        self.config = config
+        self.dataset = load_dataset(config.dataset_name, split=config.split, streaming=False)
+        if config.dataset_size and hasattr(self.dataset, "select"):
+            self.dataset = self.dataset.select(range(min(config.dataset_size, len(self.dataset))))
 
     def __len__(self):
         return len(self.dataset)

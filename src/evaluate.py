@@ -6,9 +6,10 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from config import Config
+from config import Config, load_cfg
 from data import get_dataloader
 
+main_config = "configs/config.yaml"
 torch.cuda.empty_cache()
 
 
@@ -157,12 +158,13 @@ def evaluate_pico(model, tokenizer, dataloader, args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model, tokenizer = load_model_and_tokenizer(args, device)
+    config = load_cfg(main_config)
 
-    dataloader = get_dataloader(args)
-    if args.dataset_name == "cais/mmlu":
-        evaluate_mmlu(model, tokenizer, dataloader, args)
-    elif args.dataset_name == "pico-lm/pretokenized-dolma":
-        evaluate_pico(model, tokenizer, dataloader, args)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, tokenizer = load_model_and_tokenizer(config)
+
+    dataloader = get_dataloader(config)
+    if config.dataset_name == "cais/mmlu":
+        evaluate_mmlu(model, tokenizer, dataloader, config)
+    elif config.dataset_name == "pico-lm/pretokenized-dolma":
+        evaluate_pico(model, tokenizer, dataloader, config)
