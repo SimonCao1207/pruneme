@@ -1,29 +1,17 @@
 import json
+import logging
 import math
 import os
 
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.config import Config, load_cfg
 from src.data import get_dataloader
+from utils import load_model_and_tokenizer
 
-main_config = "configs/config.yaml"
+logging.basicConfig(level=logging.INFO)
 torch.cuda.empty_cache()
-
-
-def load_model_and_tokenizer(config: Config):
-    model = AutoModelForCausalLM.from_pretrained(
-        config.model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        revision=config.revision,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(config.model_path, revision=config.revision)
-    if not tokenizer.pad_token:
-        tokenizer.pad_token = tokenizer.eos_token
-    return model, tokenizer
 
 
 def evaluate_pico(model, tokenizer, dataloader, config: Config):
@@ -99,7 +87,7 @@ def _get_pruned_model_path(config: Config) -> str:
 
 
 if __name__ == "__main__":
-    config = load_cfg(main_config)
+    config = load_cfg()
     config.model_path = _get_pruned_model_path(config)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"

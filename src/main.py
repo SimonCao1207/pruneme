@@ -9,9 +9,7 @@ from tqdm import tqdm
 
 from config import Config, load_cfg
 from data import get_dataloader
-from evaluate import load_model_and_tokenizer
-
-main_config = "configs/config.yaml"
+from utils import load_model_and_tokenizer, print_config
 
 logging.basicConfig(level=logging.INFO)
 
@@ -219,6 +217,8 @@ def compute_and_save_layer_importance(
 
 
 def main(config):
+    print_config(config)
+
     model, tokenizer = load_model_and_tokenizer(config)
     model.eval()
 
@@ -242,4 +242,4 @@ def main(config):
 
 
 if __name__ == "__main__":
-    main(config=load_cfg(main_config))
+    main(config=load_cfg())
