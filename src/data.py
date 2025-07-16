@@ -2,7 +2,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, IterableDataset
 
-from config import Config
+from src.config import Config
 
 
 class PicoDataset(IterableDataset):
@@ -39,3 +39,13 @@ def get_dataloader(config, collate_fn=collate_fn):
     else:
         raise ValueError(f"Unsupported dataset: {config.dataset_name}")
     return dataloader
+
+
+if __name__ == "__main__":
+    config = Config()
+    config.dataset_name = "pico-lm/pretokenized-dolma"
+    config.batch_size = 8
+    config.split = "train"
+    dataloader = get_dataloader(config)
+    batch = next(iter(dataloader))
+    print(batch["input_ids"].shape)

@@ -7,8 +7,8 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from config import Config, load_cfg
-from data import get_dataloader
+from src.config import Config, load_cfg
+from src.data import get_dataloader
 
 main_config = "configs/config.yaml"
 torch.cuda.empty_cache()
@@ -18,8 +18,9 @@ def load_model_and_tokenizer(config: Config):
     model = AutoModelForCausalLM.from_pretrained(
         config.model_path,
         torch_dtype=torch.bfloat16,
+        device_map="auto",
         revision=config.revision,
-    ).to(config.device)
+    )
     tokenizer = AutoTokenizer.from_pretrained(config.model_path, revision=config.revision)
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
