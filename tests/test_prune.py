@@ -47,12 +47,17 @@ def _get_expected_outputs(
 
 def _assert_outputs_match(expected_outputs, outputs) -> None:
     expected_outputs.logits = expected_outputs.logits.to(outputs.logits.device)
+    # Add debugging information
+    diff = torch.abs(expected_outputs.logits - outputs.logits)
+    max_diff = torch.max(diff)
+    mean_diff = torch.mean(diff)
+
     assert torch.allclose(
         expected_outputs.logits,
         outputs.logits,
         atol=1e-4,
         rtol=1e-3,
-    ), "Model outputs do not match expected outputs within tolerance"
+    ), f"Model outputs do not match. Max diff: {max_diff}, Mean diff: {mean_diff}"
 
 
 def _cleanup_model(model) -> None:
@@ -65,7 +70,7 @@ def test_prune_one_layer_simple():
     config = _load_test_config()
 
     # Pruned model
-    model, tokenizer= load_model_and_tokenizer(config)
+    model, tokenizer = load_model_and_tokenizer(config)
     model.eval()
 
     input_ids, attention_mask = _prepare_inputs(tokenizer, TEST_TEXT, config.device)
