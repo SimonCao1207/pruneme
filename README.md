@@ -44,7 +44,7 @@ Currently supports 3 distinct pruning methods:
 
 ## Testing
 
-**Note:** Ensure the pruned model is saved in `merged/Vanilla-3.2-8L/prune-one/6` before running tests.
+**Note:** Ensure the pruned model is saved in `merged/Vanilla-3.2-8L/prune-one/6` before running tests. (by running `scripts/prepare.sh`)
 
 ```bash
 uv run pytest tests --disable-warnings

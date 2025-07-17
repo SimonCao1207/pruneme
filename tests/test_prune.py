@@ -1,5 +1,4 @@
 import torch
-from transformers import AutoTokenizer
 
 from src.config import Config
 from src.evaluate import load_model_and_tokenizer
@@ -65,14 +64,11 @@ def test_prune_one_layer_simple():
     """Test that pruned model outputs match reference model with dropped layer."""
     config = _load_test_config()
 
-    tokenizer = AutoTokenizer.from_pretrained(config.model_path)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    input_ids, attention_mask = _prepare_inputs(tokenizer, TEST_TEXT, config.device)
-
     # Pruned model
-    model, _ = load_model_and_tokenizer(config)
+    model, tokenizer= load_model_and_tokenizer(config)
     model.eval()
+
+    input_ids, attention_mask = _prepare_inputs(tokenizer, TEST_TEXT, config.device)
 
     with torch.no_grad():
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)

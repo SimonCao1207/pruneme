@@ -7,6 +7,7 @@ import yaml
 from config import Config, load_cfg
 from mergekit.config import MergeConfiguration
 from mergekit.merge import MergeOptions, run_merge
+from utils import print_config
 
 
 def get_prune_layers(config: Config):
@@ -66,7 +67,8 @@ def _get_output_file_name(config: Config):
 
 
 if __name__ == "__main__":
-    main_config = load_cfg("configs/config.yaml")
+    main_config = load_cfg()
+    print_config(main_config)
     default_mergekit_config_path = "configs/slice.yaml"
     blocks = get_prune_blocks(main_config)
     customized_merge_config = customize_mergekit_config(main_config, default_mergekit_config_path)

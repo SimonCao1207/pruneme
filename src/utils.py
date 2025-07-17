@@ -3,7 +3,7 @@ import logging
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from config import Config
+from src.config import Config
 
 logging.basicConfig(level=logging.INFO)
 

@@ -47,9 +47,7 @@ def get_arg_parser():
     parser.add_argument("--method", type=str)
     parser.add_argument("--num_layers_to_skip", type=int)
     parser.add_argument("--prune_layer", type=int)
-    parser.add_argument(
-        "--config", type=str, default="configs/config.yaml", required=True, help="Path to YAML config file"
-    )
+    parser.add_argument("--config", type=str, default="configs/config.yaml")
     return parser
 
 

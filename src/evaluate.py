@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from src.config import Config, load_cfg
 from src.data import get_dataloader
-from utils import load_model_and_tokenizer
+from src.utils import load_model_and_tokenizer, print_config
 
 logging.basicConfig(level=logging.INFO)
 torch.cuda.empty_cache()
@@ -88,6 +88,7 @@ def _get_pruned_model_path(config: Config) -> str:
 
 if __name__ == "__main__":
     config = load_cfg()
+    print_config(config)    
     config.model_path = _get_pruned_model_path(config)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
