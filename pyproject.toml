@@ -8,16 +8,18 @@ dependencies = [
     "einops>=0.8.1", # more general tensor operations
     "jaxtyping>=0.3.0", # type hints for pytorch/jax/numpy
     "numpy",
-    "torch==2.6.0",
     "ruff>=0.12.0",
     "ipykernel>=6.29.5",
     "pandas>=2.3.0",
-    "datasets>=3.6.0",
     "wandb>=0.21.0",
     "mergekit",
     "transformers>=4.53.2",
     "pytest>=8.4.1",
     "omegaconf>=2.3.0",
+    "matplotlib>=3.10.3",
+    "datasets<=3.6.0",
+    "torchvision>=0.21.0",
+    "torch>=2.6.0",
 ]
 
 
@@ -29,6 +31,7 @@ package = true
 python-preference = "managed"
 
 [tool.uv.sources]
+torchvision = { index = "pytorch-cu118" }
 torch = { index = "pytorch-cu118" }
 mergekit = { path = "mergekit", editable = true }
 

@@ -50,3 +50,18 @@ Currently supports 3 distinct pruning methods:
 uv run pytest tests --disable-warnings
 ```
 
+## Prepare Imagenet
+- 
+```bash
+wget http://www.image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar
+mkdir -p ./data/imagenet-1k/val
+tar -xf ILSVRC2012_img_val.tar -C ./data/imagenet-1k/val
+rm ILSVRC2012_img_val.tar
+```
+
+- Run `scripts/valprep.sh` to map file names to class index
+```bash
+bash scripts/valprep.sh
+```
+
+

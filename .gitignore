@@ -196,3 +196,5 @@ cython_debug/
 outputs/
 merged/
 results/
+notebooks/
+data/

@@ -92,6 +92,8 @@ def compute_and_save_layer_distances(
     num_layers = model.config.num_hidden_layers
     num_layers_to_skip = config.num_layers_to_skip
 
+    logging.info(f"Number of layers in the model: {num_layers}")
+
     # Initialize a list to store distances for each block across the dataset
     all_distances = [[] for _ in range(num_layers - num_layers_to_skip)]
 
