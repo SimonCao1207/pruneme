@@ -26,6 +26,8 @@ def angular_distance(x_l, x_l_plus_n) -> torch.Tensor:
 
 def compute_cosine_similarity(x_l, x_l_plus_n) -> torch.Tensor:
     """Compute the cosine similarity between layer output tokens."""
+    if x_l.shape[-1] != x_l_plus_n.shape[-1]:
+        return torch.tensor(0.0, device=x_l.device)
     x_l_norm = x_l / torch.norm(x_l, dim=-1, keepdim=True)
     x_l_plus_n_norm = x_l_plus_n / torch.norm(x_l_plus_n, dim=-1, keepdim=True)
     return (x_l_norm * x_l_plus_n_norm).sum(-1)
@@ -87,7 +89,6 @@ def compute_and_save_layer_distances(
     tokenizer,
     dataloader,
     config: Config,
-    compute_block_distances,
 ):
     num_layers = model.config.num_hidden_layers
     num_layers_to_skip = config.num_layers_to_skip
@@ -232,7 +233,6 @@ def main(config):
             tokenizer,
             dataloader,
             config,
-            compute_block_distances,
         )
     else:
         compute_and_save_layer_importance(
