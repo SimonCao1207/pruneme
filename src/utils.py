@@ -34,3 +34,18 @@ def load_model_and_tokenizer(config: Config):
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
+
+
+def angular_distance(x_l, x_l_plus_n) -> torch.Tensor:
+    """Compute the angular distance between layer output tokens."""
+    cosine_similarity = compute_cosine_similarity(x_l, x_l_plus_n)
+    return torch.acos(cosine_similarity.clamp(min=-1, max=1)) / torch.pi
+
+
+def compute_cosine_similarity(x_l, x_l_plus_n) -> torch.Tensor:
+    """Compute the cosine similarity between layer output tokens."""
+    if x_l.shape[-1] != x_l_plus_n.shape[-1]:
+        return torch.tensor(0.0, device=x_l.device)
+    x_l_norm = x_l / torch.norm(x_l, dim=-1, keepdim=True)
+    x_l_plus_n_norm = x_l_plus_n / torch.norm(x_l_plus_n, dim=-1, keepdim=True)
+    return (x_l_norm * x_l_plus_n_norm).sum(-1)
