@@ -1,6 +1,7 @@
 import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, IterableDataset
+from transformers import AutoTokenizer
 from transformers.data.data_collator import DataCollatorForLanguageModeling
 
 from src.config import Config
@@ -38,7 +39,8 @@ def get_dataloader(config, collate_fn=collate_fn):
             num_workers=0,
         )
     elif config.dataset_name == "wikitext":
-        dataloader = _get_dataloader_wikitext(config.tokenizer, config.batch_size)
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
+        dataloader = _get_dataloader_wikitext(tokenizer, config.batch_size)
     else:
         raise ValueError(f"Unsupported dataset: {config.dataset_name}")
     return dataloader
@@ -73,8 +75,6 @@ def _get_dataloader_wikitext(tokenizer, batch_size=6, block_size=1024):
         group_texts,
         batched=True,
     )
-    assert isinstance(lm_dataset, IterableDataset), "lm_dataset should be an IterableDataset"
-
     print(f"Dataset processed into {len(lm_dataset)} blocks of size {block_size}.")
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -85,9 +85,8 @@ def _get_dataloader_wikitext(tokenizer, batch_size=6, block_size=1024):
 
 if __name__ == "__main__":
     config = Config()
-    config.dataset_name = "pico-lm/pretokenized-dolma"
-    config.batch_size = 8
-    config.split = "train"
+    config.dataset_name = "wikitext"
+    config.batch_size = 16
     dataloader = get_dataloader(config)
     batch = next(iter(dataloader))
     print(batch["input_ids"].shape)
