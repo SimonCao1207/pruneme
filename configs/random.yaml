@@ -1,11 +1,11 @@
 model_path: huzama/Full-3.2-16L
 model_name: Full-3.2-16L
 num_layers: 16
-dataset_name: wikitext
+dataset_name: pico-lm/pretokenized-dolma
 dataset_size: 1280
 revision: pico-epoch_0
-batch_size: 8
-max_length: 2048
+batch_size: 16
 device: cuda
-prune_layer: 6
-method : prune-one
+num_layers_to_skip: 4
+seed: 42
+method : random
