@@ -28,6 +28,9 @@ class Config:
     num_layers_to_skip: int = 1
     prune_layer: int | None = None  # Only used if method is "prune-one"
 
+    # Seed
+    seed: int = 42
+
 
 def get_arg_parser():
     # Overwrite default config with command line arguments
@@ -47,6 +50,7 @@ def get_arg_parser():
     parser.add_argument("--method", type=str)
     parser.add_argument("--num_layers_to_skip", type=int)
     parser.add_argument("--prune_layer", type=int)
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--config", type=str, default="configs/config.yaml")
     return parser
 

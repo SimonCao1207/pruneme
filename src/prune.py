@@ -11,7 +11,9 @@ from mergekit.config import MergeConfiguration
 from mergekit.merge import MergeOptions, run_merge
 from utils import print_config
 
-random.seed(42)
+
+def set_random(seed=42):
+    random.seed(seed)
 
 
 def get_prune_layers(config: Config):
@@ -52,7 +54,7 @@ def get_prune_blocks(config: Config):
         blocks.extend([first_block, second_block])
     elif config.method == "random":
         num_layers_to_skip = config.num_layers_to_skip
-        layers = sorted(random.sample(range(config.num_layers), k=num_layers_to_skip))
+        layers = sorted(random.sample(range(1, config.num_layers - 1), k=num_layers_to_skip))
         print("Dropped layers", layers)
         prev_layer = 0
         for layer in layers:
@@ -61,6 +63,9 @@ def get_prune_blocks(config: Config):
             prev_layer = layer + 1
         if prev_layer != config.num_layers:
             blocks.append([prev_layer, config.num_layers])
+    elif config.method == "gradient-based": 
+        pass
+        
 
     return blocks
 
@@ -96,6 +101,8 @@ def _get_output_file_name(config: Config):
     if config.method == "prune-one":
         assert config.prune_layer is not None
         return str(config.prune_layer)
+    elif config.method == "random":
+        return f"prune_{config.num_layers_to_skip}_seed_{config.seed}"
     else:
         return str(config.num_layers_to_skip)
 
@@ -103,6 +110,7 @@ def _get_output_file_name(config: Config):
 if __name__ == "__main__":
     main_config = load_cfg()
     print_config(main_config)
+    set_random(main_config.seed)
     default_mergekit_config_path = "configs/slice.yaml"
     customized_merge_config = customize_mergekit_config(main_config, default_mergekit_config_path)
 
