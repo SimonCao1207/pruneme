@@ -30,7 +30,7 @@ def load_model_and_tokenizer(config: Config):
         device_map="auto",
         revision=config.revision,
     )
-    tokenizer = AutoTokenizer.from_pretrained(config.model_path, revision=config.revision)
+    tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer

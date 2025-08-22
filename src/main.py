@@ -59,7 +59,7 @@ def get_last_non_padded_tokens(hidden_states, attention_mask) -> list[torch.Tens
         batch_size, _, _ = layer.size()
         batch_last_tokens = []
         for batch in range(batch_size):
-            if attention_mask:
+            if attention_mask is not None:
                 last_non_pad_index = attention_mask[batch].nonzero(as_tuple=True)[0].max()
             else:
                 last_non_pad_index = layer[batch].size(0) - 1
@@ -166,7 +166,7 @@ def compute_and_save_layer_importance(
     all_importances = []
 
     for batch in tqdm(dataloader, desc="Processing batches"):
-        if config.dataset_name == "pico-lm/pretokenized-dolma":
+        if config.dataset_name in ["pico-lm/pretokenized-dolma", "wikitext"]:
             input_ids = batch["input_ids"].to(model.device)
             attention_mask = batch.get("attention_mask", None)
             if attention_mask is not None:
