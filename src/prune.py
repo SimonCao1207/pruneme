@@ -38,8 +38,8 @@ def get_prune_blocks(config: Config):
         first_block = [0, prune_layers_info["block_start"]]
         second_block = [prune_layers_info["block_end"], config.num_layers]
     elif config.method == "prune-one":
-        layer = config.prune_layer
-        assert layer is not None
+        assert config.prune_layers is not None
+        layer = config.prune_layers[0]
         first_block = [0, layer]
         second_block = [layer + 1, config.num_layers]
 
@@ -60,8 +60,8 @@ def customize_mergekit_config(config: Config, mergekit_config_path: str):
 
 def _get_output_file_name(config: Config):
     if config.method == "prune-one":
-        assert config.prune_layer is not None
-        return str(config.prune_layer)
+        assert config.prune_layers is not None
+        return str(config.prune_layers[0])
     else:
         return str(config.num_layers_to_skip)
 

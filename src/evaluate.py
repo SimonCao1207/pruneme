@@ -26,11 +26,11 @@ def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(model.device)
 
-            if config.method == "prune-one":
+            if config.method == "prune-multiple":
                 outputs = model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
-                    drop_layer_id=config.prune_layer,
+                    drop_layer_ids=config.prune_layers,
                     labels=input_ids,
                 )
             else:
@@ -64,11 +64,13 @@ def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
         model_name = os.path.basename(os.path.dirname(config.model_path))
 
     print(f"Model path: {config.model_path}")
-    if config.method == "prune-one":
-        assert config.prune_layer is not None
-        print(f"Pruning layer: {config.prune_layer}")
-        output_info.update({"prune_layer": config.prune_layer})
-        output_file = f"results/{dataset_name}/prune-one/{model_name}_{config.prune_layer}.json"
+    if config.method == "prune-multiple":
+        assert config.prune_layers is not None
+        print(f"Pruning layer: {config.prune_layers}")
+        output_info.update({"prune_layers": config.prune_layers})
+        output_file = (
+            f"results/{dataset_name}/prune-multiple/{model_name}_{'_'.join(map(str, config.prune_layers))}.json"
+        )
     else:
         print(f"Number of layers to skip: {config.num_layers_to_skip}")
         output_info.update({"num_layers_to_skip": config.num_layers_to_skip})
@@ -87,17 +89,13 @@ def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
 
 
 def _get_pruned_model_path(config: Config) -> str:
-    if config.method == "prune-one":
-        assert config.prune_layer is not None
-        return f"merged/{os.path.basename(config.model_path)}/prune-one/{config.prune_layer}"
-    else:
-        return f"merged/{os.path.basename(config.model_path)}/{config.method}/{config.num_layers_to_skip}"
+    return f"merged/{os.path.basename(config.model_path)}/{config.method}/{config.num_layers_to_skip}"
 
 
 if __name__ == "__main__":
     config = load_cfg()
     print_config(config)
-    if config.method != "prune-one":
+    if config.method != "prune-multiple":
         config.model_path = _get_pruned_model_path(config)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"

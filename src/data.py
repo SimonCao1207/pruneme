@@ -10,24 +10,33 @@ from src.config import Config
 class PicoDataset(IterableDataset):
     def __init__(self, config: Config):
         self.args = config
-        self.dataset = load_dataset(config.dataset_name, split=config.split, streaming=True)
-        if config.dataset_size:
-            self.dataset = self.dataset.take(config.dataset_size)
+        self.dataset = load_dataset(config.dataset_name, split="train", streaming=True)
+        val_size = 64 * 20
+        self.dataset = self.dataset.take(val_size)
 
     def __iter__(self):
         yield from self.dataset
 
 
-def collate_fn(batch, args):
-    if args.dataset_name == "pico-lm/pretokenized-dolma":
-        input_ids_list = [torch.tensor(x["input_ids"]) for x in batch]
-        input_ids = torch.nn.utils.rnn.pad_sequence(input_ids_list, batch_first=True, padding_value=0)
-        return {
-            "input_ids": input_ids,  # (batch_size, max_seq_len)
-        }
+def collate_fn(batch, tokenizer):
+    inputs = {}
+
+    inputs["input_ids"] = torch.tensor([item["input_ids"] for item in batch], dtype=torch.long)
+    inputs["attention_mask"] = (inputs["input_ids"] != tokenizer.pad_token_id).long()
+
+    labels = inputs["input_ids"].clone()
+    labels[labels == tokenizer.pad_token_id] = -100
+    inputs["labels"] = labels
+
+    inputs["input_ids"] = inputs["input_ids"][:, :-1]
+    inputs["attention_mask"] = inputs["attention_mask"][:, :-1]
+    inputs["labels"] = inputs["labels"][:, 1:]
+
+    return inputs
 
 
 def get_dataloader(config, collate_fn=collate_fn):
+    tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
     if config.dataset_name == "pico-lm/pretokenized-dolma":
         torch_dataset = PicoDataset(config)
         dataloader = DataLoader(
@@ -35,11 +44,10 @@ def get_dataloader(config, collate_fn=collate_fn):
             batch_size=config.batch_size,
             shuffle=False,
             drop_last=True,
-            collate_fn=lambda batch: collate_fn(batch, config),
+            collate_fn=lambda batch: collate_fn(batch, tokenizer),
             num_workers=0,
         )
     elif config.dataset_name == "wikitext":
-        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
         dataloader = _get_dataloader_wikitext(tokenizer, config.batch_size)
     else:
         raise ValueError(f"Unsupported dataset: {config.dataset_name}")

@@ -25,17 +25,17 @@ def print_config(config: Config) -> None:
 
 
 def load_model_and_tokenizer(config: Config):
-    if config.method == "prune-one":
+    if config.method == "prune-multiple":
         model = LlamaForCausalLM.from_pretrained(
             config.model_path,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float32,
             device_map="auto",
             revision=config.revision,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             config.model_path,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float32,
             device_map="auto",
             revision=config.revision,
         )
