@@ -84,7 +84,7 @@ def compute_and_save_layer_distances(
     all_distances = [[] for _ in range(num_layers - num_layers_to_skip)]
 
     for batch in tqdm(dataloader, desc="Processing batches"):
-        if config.dataset_name == "pico-lm/pretokenized-dolma":
+        if config.dataset_name in ["pico-lm/pretokenized-dolma", "wikitext"]:
             input_ids = batch["input_ids"].to(model.device)
             attention_mask = batch.get("attention_mask", None)
             if attention_mask is not None:

@@ -46,7 +46,7 @@ def get_dataloader(config, collate_fn=collate_fn):
     return dataloader
 
 
-def _get_dataloader_wikitext(tokenizer, batch_size=6, block_size=1024):
+def _get_dataloader_wikitext(tokenizer, batch_size=16, block_size=1024):
     val_dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="validation")
 
     val_dataset = val_dataset.filter(lambda example: len(example["text"]) > 0)
