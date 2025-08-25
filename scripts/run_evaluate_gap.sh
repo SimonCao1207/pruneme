@@ -2,4 +2,5 @@
 
 python src/evaluate.py \
     --model_name "Full" \
-    --prune_layers 11 12 13 14
+    --method prune-multiple \
+    --prune_layers 13
