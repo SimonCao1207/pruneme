@@ -17,16 +17,15 @@ class Config:
     batch_size: int = 8
     max_length: int = 2048
     dataset_column: str | None = None
-    dataset_size: int | None = None
     dataset_subset: str = "eval"
     split: str = "train"
     device: str = "cuda"
     revision: str = "main"
 
     # Merge config
-    method: str = "normal"  # normal | similarity-based | prune-one
+    method: str = "normal"  # normal | similarity-based | prune-multiple
     num_layers_to_skip: int = 1
-    prune_layer: int | None = None  # Only used if method is "prune-one"
+    prune_layers: list[int] | None = None  # Only used if method is "prune-multiple"
 
 
 def get_arg_parser():
@@ -39,14 +38,13 @@ def get_arg_parser():
     parser.add_argument("--batch_size", type=int)
     parser.add_argument("--max_length", type=int)
     parser.add_argument("--dataset_column", type=str)
-    parser.add_argument("--dataset_size", type=int)
     parser.add_argument("--dataset_subset", type=str)
     parser.add_argument("--split", type=str)
     parser.add_argument("--device", type=str)
     parser.add_argument("--revision", type=str)
     parser.add_argument("--method", type=str)
     parser.add_argument("--num_layers_to_skip", type=int)
-    parser.add_argument("--prune_layer", type=int)
+    parser.add_argument("--prune_layers", type=int, nargs="+")
     parser.add_argument("--config", type=str, default="configs/config.yaml")
     return parser
 

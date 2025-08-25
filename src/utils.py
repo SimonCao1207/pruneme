@@ -4,6 +4,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.config import Config
+from src.model import LlamaForCausalLM
 
 logging.basicConfig(level=logging.INFO)
 
@@ -24,12 +25,20 @@ def print_config(config: Config) -> None:
 
 
 def load_model_and_tokenizer(config: Config):
-    model = AutoModelForCausalLM.from_pretrained(
-        config.model_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        revision=config.revision,
-    )
+    if config.method == "prune-multiple":
+        model = LlamaForCausalLM.from_pretrained(
+            config.model_path,
+            torch_dtype=torch.float32,
+            device_map="auto",
+            revision=config.revision,
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            config.model_path,
+            torch_dtype=torch.float32,
+            device_map="auto",
+            revision=config.revision,
+        )
     tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token

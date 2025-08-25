@@ -11,7 +11,7 @@ REFERENCE_MODEL_PATH = "huzama/Vanilla-3.2-8L"
 def _load_test_config() -> Config:
     config = Config()
     config.model_path = "merged/Vanilla-3.2-8L/prune-one/6"
-    config.prune_layer = 6
+    config.prune_layers = [6]
     config.revision = "pico-epoch_0"
     return config
 
@@ -41,7 +41,7 @@ def _get_expected_outputs(
         return reference_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            drop_layer_id=prune_layer,
+            drop_layer_ids=[prune_layer],
         )
 
 
@@ -83,6 +83,7 @@ def test_prune_one_layer_simple():
     # Reference model
     config.model_path = REFERENCE_MODEL_PATH
     reference_model = _load_reference_model(config)
-    expected_outputs = _get_expected_outputs(reference_model, input_ids, attention_mask, config.prune_layer)
+    layer = config.prune_layers[0] if config.prune_layers is not None else 6
+    expected_outputs = _get_expected_outputs(reference_model, input_ids, attention_mask, layer)
 
     _assert_outputs_match(expected_outputs, outputs)

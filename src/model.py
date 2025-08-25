@@ -541,7 +541,7 @@ class LlamaModel(LlamaPreTrainedModel):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         virtual: bool | None = True,
-        drop_layer_id: int | None = None,
+        drop_layer_ids: list[int] | None = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if self.config.virtual_layers:
@@ -621,7 +621,7 @@ class LlamaModel(LlamaPreTrainedModel):
             for _ in range(self.layer_reps[layer_idx]):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
-                if drop_layer_id is not None and self.training is False and layer_idx == drop_layer_id:
+                if drop_layer_ids is not None and self.training is False and layer_idx in drop_layer_ids:
                     logger.info(f"Skipping layer {layer_idx} during forward pass.")
                     continue
 

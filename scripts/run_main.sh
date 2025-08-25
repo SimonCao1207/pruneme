@@ -1,7 +1,7 @@
 #!/bin/bash
-
-for l in {1..7}; do
-    python src/main.py \
-        --num_layers_to_skip $l \
-        --method similarity-based
+for i in 1 2 4 6 8
+do
+python src/main.py \
+    --num_layers_to_skip $i \
+    --method similarity-based
 done
