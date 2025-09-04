@@ -22,10 +22,16 @@ class Config:
     device: str = "cuda"
     revision: str = "main"
 
-    # Merge config
-    method: str = "normal"  # normal | similarity-based | prune-multiple
+    # Prune config
+    method: str = "normal"  # normal | similarity-based | prune-multiple | taylor | magnitude
     num_layers_to_skip: int = 1
-    prune_layers: list[int] | None = None  # Only used if method is "prune-multiple"
+
+    # For method "prune-multiple"
+    prune_layers: list[int] | None = None
+
+    # For method taylor and magnitude
+    weight_reduction: str = "sum"  # sum, mean, max, prod
+    block_reduction: str = "sum"  # sum, mean, max, prod
 
 
 def get_arg_parser():
@@ -45,6 +51,8 @@ def get_arg_parser():
     parser.add_argument("--method", type=str)
     parser.add_argument("--num_layers_to_skip", type=int)
     parser.add_argument("--prune_layers", type=int, nargs="+")
+    parser.add_argument("--weight_reduction", type=str, default="sum", help="sum, mean, max, prod")
+    parser.add_argument("--block_reduction", type=str, default="sum", help="sum, mean, max, prod")
     parser.add_argument("--config", type=str, default="configs/config.yaml")
     return parser
 
