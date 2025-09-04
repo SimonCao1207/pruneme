@@ -15,14 +15,16 @@ def main():
     model, tokenizer = load_model_and_tokenizer(config)
     os.makedirs(f"outputs/{config.model_name}/{config.method}", exist_ok=True)
 
-    salience_save_path = f"outputs/{config.model_name}/{config.method}/salience_dict_{config.method}.pt"
+    norm_power = 1
+
+    salience_save_path = f"outputs/{config.model_name}/{config.method}/salience_dict_{config.method}_L{norm_power}.pt"
     salience_dict = load_salience_dict(salience_save_path, model, config)
 
-    result_csv_weight = f"outputs/{config.model_name}/{config.method}/weight_score.csv"
-    result_csv_block = f"outputs/{config.model_name}/{config.method}/block_score_all.csv"
-    result_csv_block_detail = f"outputs/{config.model_name}/{config.method}/block_score_all_detail.csv"
-    result_csv_block_sort = f"outputs/{config.model_name}/{config.method}/block_score_sorted.csv"
-    block_order_path = f"outputs/{config.model_name}/{config.method}/block_order.csv"
+    result_csv_weight = f"outputs/{config.model_name}/{config.method}/weight_score_L{norm_power}.csv"
+    result_csv_block = f"outputs/{config.model_name}/{config.method}/block_score_all_L{norm_power}.csv"
+    result_csv_block_detail = f"outputs/{config.model_name}/{config.method}/block_score_all_detail_L{norm_power}.csv"
+    result_csv_block_sort = f"outputs/{config.model_name}/{config.method}/block_score_sorted_L{norm_power}.csv"
+    block_order_path = f"outputs/{config.model_name}/{config.method}/block_order_L{norm_power}.csv"
     block_info = {}
     with open(result_csv_weight, "w") as logfile:
         logwriter = csv.writer(logfile, delimiter=",")
@@ -31,9 +33,9 @@ def main():
             if param.requires_grad and "weight" in k and "embed_tokens" not in k:
                 layer_idx = _get_layer_idx(k)
                 if "proj" in k or "lm_head" in k:  # output_dim x input_dim
-                    weight_imp = salience_dict[k].abs().pow(2).sum(dim=1)  # [output_dim]
+                    weight_imp = salience_dict[k].abs().pow(norm_power).sum(dim=1)  # [output_dim]
                 elif "norm" in k:  # [output_dim]
-                    weight_imp = salience_dict[k].abs().pow(2)
+                    weight_imp = salience_dict[k].abs().pow(norm_power)
 
                 if config.weight_reduction == "sum":
                     weight_imp = weight_imp.sum(dim=0).item()
