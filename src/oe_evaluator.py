@@ -1,36 +1,19 @@
 import logging
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 import torch
 from torch.utils.data import DataLoader
 from torchmetrics import MeanMetric, Metric
+from tqdm import tqdm
 
+from config import EvaluatorType
 from oe_metric import ICLMetric
 from utils import cross_entropy_loss, move_to_device
 
 log = logging.getLogger(__name__)
 
 __all__ = ["Evaluator"]
-
-
-class StrEnum(str, Enum):
-    """
-    This is equivalent to Python's :class:`enum.StrEnum` since version 3.11.
-    We include this here for compatibility with older version of Python.
-    """
-
-    def __str__(self) -> str:
-        return self.value
-
-    def __repr__(self) -> str:
-        return f"'{str(self)}'"
-
-
-class EvaluatorType(StrEnum):
-    downstream = "downstream"
-    lm = "lm"
 
 
 @dataclass
@@ -108,12 +91,14 @@ class Evaluator:
 
 
 class EvaluateLM:
-    def __init__(self, model: torch.nn.Module, evaluator: Evaluator, device: torch.device) -> None:
+    def __init__(
+        self, model: torch.nn.Module, evaluators: list[Evaluator], log_path: str, device: torch.device
+    ) -> None:
         self.model = model
-        self.evaluator = evaluator
+        self.evaluators = evaluators
         self.loss_fn = cross_entropy_loss
         self.device = device
-        self.console_log_interval = 1  # Set to 1 to log every eval step, 0 otherwise
+        self.log_file_path = log_path
 
     def get_labels(self, batch: dict[str, Any]) -> torch.Tensor:
         # Labels are just input IDs shifted to the left (first item is ignored).
@@ -165,7 +150,7 @@ class EvaluateLM:
         return ce_loss.mean(dim=-1), logits
 
     def eval_step(self, batch: dict[str, Any], evaluator: Evaluator) -> None:
-        # Move tensors to the right device.
+        # TODO: consider moving only necessary tensors
         batch = move_to_device(batch, self.device)
 
         # Run forward pass.
@@ -175,7 +160,7 @@ class EvaluateLM:
         # Update metrics.
         evaluator.update_metrics(batch, ce_loss, logits)  # batch includes all keys that the downstream evaluation needs
 
-    def log_metrics_to_console(self, prefix: str, metrics: dict[str, float]):
+    def log_metrics_to_file(self, prefix: str, metrics: dict[str, float], filename: str = "metrics.log"):
         def format_float(value: float) -> str:
             if value < 0.0001:
                 return str(value)  # scientific notation
@@ -190,41 +175,34 @@ class EvaluateLM:
             else:
                 return f"{value:.4f}"
 
-        log.info(
-            f"{prefix}\n"
-            + "\n".join(
-                [
-                    f"    {name}={format_float(value)}"
-                    for name, value in metrics.items()
-                    if name == "optim/total_grad_norm"
-                    or not name.startswith("optim/")  # there's too many optimizer metrics
-                ]
-            )
-        )
+        lines = [
+            f"    {name}={format_float(value)}"
+            for name, value in metrics.items()
+            if name == "optim/total_grad_norm" or not name.startswith("optim/")
+        ]
+        with open(filename, "a") as f:
+            f.write(f"{prefix}\n" + "\n".join(lines) + "\n")
 
     def eval(self):
         eval_metrics = {}
-        log.info(f"Running evaluation for '{self.evaluator.label}'...")
 
         # Reset metrics.
-        self.evaluator.reset_metrics()
+        for evaluator in self.evaluators:
+            log.info(f"Running evaluation for '{evaluator.label}'...")
+            evaluator.reset_metrics()
 
-        # Initialize data loader iterator.
-        eval_batches = iter(self.evaluator.eval_loader)
-        num_eval_batches = len(self.evaluator.eval_loader)
+            # Initialize data loader iterator.
+            eval_batches = iter(evaluator.eval_loader)
+            num_eval_batches = len(evaluator.eval_loader)
 
-        # Run model over batches.
-        for eval_step, eval_batch in enumerate(eval_batches):
-            self.eval_step(eval_batch, self.evaluator)
+            # Run model over batches.
+            for _, eval_batch in tqdm(enumerate(eval_batches), total=num_eval_batches):
+                self.eval_step(eval_batch, evaluator)
 
-            # Log to console.
-            if eval_step + 1 == num_eval_batches or (eval_step + 1) % self.console_log_interval == 0:
-                log.info(f"[eval_step={eval_step + 1}/{num_eval_batches}]")
-
-        # Get final metrics.
-        metrics = self.evaluator.compute_metrics()
-        eval_metrics.update(metrics)
-        self.log_metrics_to_console(f"{self.evaluator.label}", metrics)
+            # Get final metrics.
+            metrics = evaluator.compute_metrics()
+            eval_metrics.update(metrics)
+            self.log_metrics_to_file(f"{evaluator.label}", metrics, filename=self.log_file_path)
 
         del eval_batches
         return eval_metrics

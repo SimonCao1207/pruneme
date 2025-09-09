@@ -7,4 +7,7 @@ batch_size: 16
 max_length: 2048
 device: cuda
 prune_layers: [6]
-method : prune-multiple
+method: prune-multiple
+evaluators:
+  - label: boolq_mc_5shot 
+  - label: boolq_val_mc_5shot

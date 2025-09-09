@@ -6,9 +6,9 @@ from typing import Any
 import datasets
 import torch
 from torch.utils.data import DataLoader
-from transformers import PreTrainedTokenizer as Tokenizer
 
-from oe_evaluator import EvaluateLM, Evaluator, EvaluatorType
+from config import Config, EvaluatorConfig
+from oe_evaluator import EvaluateLM, Evaluator
 from oe_metric import ICLMetric
 from src.config import load_cfg
 from utils import load_hf_dataset, load_model_and_tokenizer, load_oe_eval_requests, print_config
@@ -31,13 +31,12 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        tokenizer: Tokenizer,
+        tokenizer,
         dataset_path: str,
         dataset_name: str | Sequence[str] | None = None,
         model_ctx_len: int = 2048,
         split="validation",
         metric_type=None,  # Override default metric type
-        prompts=[None],  # List of prompt variants to use
     ):
         super().__init__()
 
@@ -45,7 +44,6 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         self.dataset_path = dataset_path
         self.dataset_name = dataset_name
         self.model_ctx_len = model_ctx_len
-        self.prompts = prompts
         self.current_prompt = None
         if metric_type is not None:
             self.metric_type = metric_type
@@ -72,72 +70,6 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
 
     def __len__(self):
         return len(self.samples)
-
-    def prep_examples(self):
-        """Append doc_ids to each example so that they are processed together in the metric"""
-        doc_id = 0
-        for doc in self.dataset:
-            for prompt in self.prompts:
-                self.current_prompt = prompt
-                # from EAI harness
-                # how this all works:
-                #          CTX      CONT
-                # inp    0 1 2 3|4 5 6 7 8 9   <- last token is deleted by inp[:, :-1]
-                # gpt2    \               \
-                # logits   1 2 3|4 5 6 7 8 9   <- the ctx half gets tossed out by the
-                # cont_toks      4 5 6 7 8 9      [:, -len(continuation_enc):, :self.vocab_size] slice
-
-                continuations = self.doc_to_continuations(doc)
-                label_id = self.doc_to_label(doc)
-                doc_text = self.doc_to_text(doc)
-                ctx = self.token_encode(doc_text)
-                dc = self.token_encode(self.doc_to_domain_conditional(doc))
-                if self.log_instances > 0:
-                    self.log_instances -= 1
-                    ds_name = self.dataset_name
-                    if isinstance(ds_name, list):
-                        ds_name = ds_name[0]
-                    log.info(
-                        f"Sample doc from ({self.dataset_path}, {ds_name}, {self.current_prompt}):"
-                        + f"\ndoc_text: {doc_text}\ncontinuations: {continuations}"
-                    )
-
-                for cont_id, continuation_str in enumerate(continuations):
-                    cont_str_len = len(continuation_str) - 1  # continuation contain leading blank
-                    cont_byte_len = len(continuation_str[1:].encode("utf-8"))
-                    continuation = self.token_encode(continuation_str)
-
-                    # query, remove last token from continuation, truncate from left is longer than model ctx length
-                    query = ctx + continuation[:-1]
-                    query = query[-self.model_ctx_len :]
-                    # this will be different from len(ctx) when truncated by model_ctx_len
-                    actual_ctx_len = len(query) - len(continuation) + 1
-
-                    # get domain conditional query
-                    # we don't expect this to be longer than self.model_ctx_len and it won't make sense to truncate from left
-                    dc_query = dc + continuation[:-1]
-
-                    # form a sample
-                    self.samples.append(
-                        {
-                            "doc_id": doc_id,
-                            "cont_id": cont_id,
-                            "ctx": ctx,
-                            "continuation": continuation,
-                            "ctx_len": actual_ctx_len,
-                            "dc_len": len(dc),
-                            "cont_len": len(
-                                continuation
-                            ),  # even if query has last token removed, LM will output same cont len
-                            "cont_str_len": cont_str_len,
-                            "cont_byte_len": cont_byte_len,
-                            "query": query,  # remove last token from continuation
-                            "dc_query": dc_query,
-                            "label_id": label_id,
-                        }
-                    )
-
-                doc_id += 1
 
     def pad_tokens_until_max(self, tokens, max_len=2048):
         """truncate from left if len(tokens) > model_ctx_len, max_len is not considered then
@@ -237,6 +169,13 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         return self.tokenizer.decode(tokens)
 
     @abc.abstractmethod
+    def prep_examples(self):
+        """
+        Prepares self.samples from self.dataset
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def doc_to_text(self, doc) -> str:
         """Match EAI eval harness
         returns a single context string
@@ -270,13 +209,12 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
 
     def __init__(
         self,
-        tokenizer: Tokenizer,
+        tokenizer,
         dataset_path: str,
         dataset_name: str | Sequence[str] | None = None,
         model_ctx_len: int = 2048,
         split=None,
         metric_type=None,
-        prompts=[None],  # List of prompt variants to use
     ):
         self.tokenizer = tokenizer
         self.dataset_path = dataset_path
@@ -410,19 +348,16 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
         raise NotImplementedError
 
 
-label_to_task_map = {
-    "boolq_mc_5shot": (OEEvalTask, {"dataset_path": "boolq", "dataset_name": "mc_5shot", "metric_type": "acc"}),
-}
-
-if __name__ == "__main__":
-    config = load_cfg()
-    config.dataset_name = "boolq_mc_5shot"
-    print_config(config)
-    model, tokenizer = load_model_and_tokenizer(config)
-    task_class = label_to_task_map[config.dataset_name]
+def build_evaluator(
+    cfg: Config,
+    eval_cfg: EvaluatorConfig,
+    tokenizer,
+    device: torch.device,
+) -> Evaluator:
+    task_class = label_to_task_map[eval_cfg.label]
     if isinstance(task_class, tuple):
         task_class, task_kwargs = task_class
-    ds_eval_dataset = task_class(tokenizer=tokenizer, model_ctx_len=config.max_length, **task_kwargs)  # type: ignore
+    ds_eval_dataset = task_class(tokenizer=tokenizer, model_ctx_len=cfg.max_length, **task_kwargs)  # type: ignore
     ds_eval_dataloader = DataLoader(
         ds_eval_dataset,  # type: ignore
         batch_size=config.batch_size,
@@ -433,11 +368,39 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     evaluator = Evaluator(
-        label=config.dataset_name,
-        type=EvaluatorType.downstream,
+        label=eval_cfg.label,
+        type=eval_cfg.type,
         eval_loader=ds_eval_dataloader,
         eval_metric=metric.to(device),
     )
-    eval_lm = EvaluateLM(model=model, evaluator=evaluator, device=device)
+    return evaluator
+
+
+def build_evaluators(cfg: Config, tokenizer, device: torch.device) -> list[Evaluator]:
+    evaluators = []
+    assert cfg.evaluators is not None
+    for eval_cfg in cfg.evaluators:
+        eval_cfg = EvaluatorConfig(**eval_cfg) if isinstance(eval_cfg, dict) else eval_cfg
+        evaluators.append(build_evaluator(cfg, eval_cfg, tokenizer, device))
+    return evaluators
+
+
+label_to_task_map = {
+    "boolq_mc_5shot": (OEEvalTask, {"dataset_path": "boolq", "dataset_name": "mc_5shot", "metric_type": "acc"}),
+    "boolq_val_mc_5shot": (
+        OEEvalTask,
+        {"dataset_path": "boolq", "dataset_name": "val_mc_5shot", "metric_type": "acc"},
+    ),
+}
+
+
+if __name__ == "__main__":
+    log_path = "results/eval_logs.jsonl"
+    config = load_cfg()
+    print_config(config)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model, tokenizer = load_model_and_tokenizer(config)
+    evaluators = build_evaluators(config, tokenizer, device)
+    eval_lm = EvaluateLM(model=model, evaluators=evaluators, log_path=log_path, device=device)
     eval_metrics = eval_lm.eval()
     print(eval_metrics)

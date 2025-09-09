@@ -1,8 +1,33 @@
 # config.py
 import argparse
 from dataclasses import dataclass
+from enum import Enum
 
 from omegaconf import OmegaConf
+
+
+class StrEnum(str, Enum):
+    """
+    This is equivalent to Python's :class:`enum.StrEnum` since version 3.11.
+    We include this here for compatibility with older version of Python.
+    """
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return f"'{str(self)}'"
+
+
+class EvaluatorType(StrEnum):
+    downstream = "downstream"
+    lm = "lm"
+
+
+@dataclass
+class EvaluatorConfig:
+    label: str
+    type: EvaluatorType = EvaluatorType.downstream
 
 
 @dataclass
@@ -32,6 +57,9 @@ class Config:
     # For method taylor and magnitude
     weight_reduction: str = "sum"  # sum, mean, max, prod
     block_reduction: str = "sum"  # sum, mean, max, prod
+
+    # Evaluation for downstream tasks
+    evaluators: list[EvaluatorConfig] | None = None
 
 
 def get_arg_parser():
