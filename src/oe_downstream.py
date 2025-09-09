@@ -1,9 +1,11 @@
 import abc
 import logging
 from collections.abc import Sequence
+import os
 from typing import Any
 
 import datasets
+import re
 import torch
 from torch.utils.data import DataLoader
 
@@ -347,6 +349,104 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
     def doc_to_label(self, doc) -> int:
         raise NotImplementedError
 
+class PIQA(ICLMultiChoiceTaskDataset):
+    """PIQA sends context in the following fashion: "Question: GOAL\nAnswer:"
+    space added as prefix to each continuation
+
+    implement PMI_DC
+
+    {
+        'goal': "How do I ready a guinea pig cage for it's new occupants?",
+        'sol1': 'Provide the guinea pig with a cage full of a few inches of bedding made of ripped paper strips, you will also need to supply it with a water bottle and a food dish.',
+        'sol2': 'Provide the guinea pig with a cage full of a few inches of bedding made of ripped jeans material, you will also need to supply it with a water bottle and a food dish.',
+        'label': 0
+    }
+    """
+
+    metric_type = "len_norm"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="piqa",
+        dataset_name="plain_text",
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def doc_to_text(self, doc):
+        return "Question: " + doc["goal"] + "\nAnswer:"
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        return [" " + doc["sol1"], " " + doc["sol2"]]
+
+    def doc_to_label(self, doc):
+        return doc["label"]
+
+    def doc_to_domain_conditional(self, doc):
+        del doc
+        return "Answer:"
+
+class HellaSwag(ICLMultiChoiceTaskDataset):
+    """HellaSwag concats "ACTIVITY_LABEL: CTX_A CTX_B.capitalize()" to form context and then sends endings as continuations
+        space added as prefix to each continuation
+
+    {
+        'activity_label': 'Roof shingle removal',
+        'ctx_a': 'A man is sitting on a roof.',
+        'ctx_b': 'he',
+        'ctx': 'A man is sitting on a roof. he',
+        'endings': ['is using wrap to wrap a pair of skis.', 'is ripping level tiles off.', "is holding a rubik's cube.", 'starts pulling up roofing on a roof.'],
+        'label': '3'
+    }
+    """
+
+    metric_type = "len_norm"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="hellaswag",
+        dataset_name=None,
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    @classmethod
+    def preprocess(cls, text):
+        text = text.strip()
+        # NOTE: Brackets are artifacts of the WikiHow dataset portion of HellaSwag.
+        text = text.replace(" [title]", ". ")
+        text = re.sub("\\[.*?\\]", "", text)
+        text = text.replace("  ", " ")
+
+        return text
+
+    def doc_to_text(self, doc):
+        return self.preprocess(doc["activity_label"] + ": " + doc["ctx_a"] + " " + doc["ctx_b"].capitalize())
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        return [" " + self.preprocess(ending) for ending in doc["endings"]]
+
+    def doc_to_label(self, doc):
+        return int(doc["label"])
+
+    def doc_to_domain_conditional(self, doc):
+        domain_conditional = self.preprocess(doc["ctx_b"].capitalize())
+
+        # ensure non 0 len domain conditional
+        if len(domain_conditional) == 0:
+            return self.preprocess(doc["ctx_a"]).split(" ")[-1]
+
+        return domain_conditional
 
 def build_evaluator(
     cfg: Config,
@@ -384,6 +484,242 @@ def build_evaluators(cfg: Config, tokenizer, device: torch.device) -> list[Evalu
         evaluators.append(build_evaluator(cfg, eval_cfg, tokenizer, device))
     return evaluators
 
+class OpenBookQA(ICLMultiChoiceTaskDataset):
+    """OBQA: question_stem is sent as context (no special prompt format) and choices are sent as continuation
+        space added as prefix to each continuation
+
+        implement PMI_DC
+
+    {
+        'question_stem': 'Frilled sharks and angler fish live far beneath the surface of the ocean, which is why they are known as',
+        'choices': {'text': ['Deep sea animals', 'fish', 'Long Sea Fish', 'Far Sea Animals'],
+        'label': ['A', 'B', 'C', 'D']},
+        'answerKey': 'A'
+    }
+    """
+
+    metric_type = "len_norm"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="openbookqa",
+        dataset_name="main",
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def doc_to_text(self, doc):
+        return doc["question_stem"]
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        return [" " + choice for choice in doc["choices"]["text"]]
+
+    def doc_to_label(self, doc):
+        return ["A", "B", "C", "D"].index(doc["answerKey"].strip())
+
+    def doc_to_domain_conditional(self, doc):
+        return doc["question_stem"].strip().split(" ")[-1]
+
+
+class WinoGrande(ICLMultiChoiceTaskDataset):
+    """Prompt: split sentence at _ "SENTENCE[:idx] + OPTION1/OPTION2", where idx = SENTENCE.index("_")
+        implement PMI_DC
+        acc, random at 50%
+        continuation is everything in setnence after '_' (" SENTENCE[idx:].strip()")
+
+        Req_loglikelihood('People think Samantha', ' is embarassed, because Samantha made snide comments about the shirt Rebecca was wearing.')
+        Req_loglikelihood('People think Rebecca', ' is embarassed, because Samantha made snide comments about the shirt Rebecca was wearing.')
+
+    {
+        'sentence': 'People think _ is embarassed, because Samantha made snide comments about the shirt Rebecca was wearing.',
+        'option1': 'Samantha',
+        'option2': 'Rebecca',
+        'answer': '2'
+    }
+
+    TODO: might need to write custom metric for Winogrande
+    """
+
+    metric_type = "acc"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="winogrande",
+        dataset_name="winogrande_xl",
+    ):
+        # all winogrande datasets have same val set
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def prep_examples(self):
+        """Overwrite for WinoGrande as multiple ctx, single continuation"""
+        doc_id = 0
+        for doc in self.dataset:
+            # here ctx is a list
+            ctxs = self.doc_to_text(doc)
+            dcs = self.doc_to_domain_conditional(doc)
+
+            continuation_str = self.doc_to_continuations(doc)
+            label_id = self.doc_to_label(doc)
+            cont_str_len = len(continuation_str) - 1  # continuations contain leading blank space
+            cont_byte_len = len(continuation_str[1:].encode("utf-8"))
+
+            # tokenize
+            continuation = self.token_encode(continuation_str)
+
+            for cont_id, (ctx, dc) in enumerate(zip(ctxs, dcs)):
+                ctx = self.token_encode(ctx)
+                dc = self.token_encode(dc)
+
+                # query, remove last token from continuation, truncate from left is longer than model ctx length
+                query = ctx + continuation[:-1]
+                query = query[-self.model_ctx_len :]
+
+                # get domain conditional query
+                # we don't expect this to be longer than self.model_ctx_len and it won't make sense to truncate from left
+                dc_query = dc + continuation[:-1]
+
+                # form a sample
+                self.samples.append(
+                    {
+                        "doc_id": doc_id,
+                        "cont_id": cont_id,
+                        "ctx": ctx,
+                        "continuation": continuation,
+                        "ctx_len": len(ctx),
+                        "dc_len": len(dc),
+                        "cont_len": len(
+                            continuation
+                        ),  # even if query has last token removed, LM will output same cont len
+                        "cont_str_len": cont_str_len,
+                        "cont_byte_len": cont_byte_len,
+                        "query": query,  # remove last token from continuation
+                        "dc_query": dc_query,
+                        "label_id": label_id,
+                    }
+                )
+
+            doc_id += 1
+
+    def doc_to_text(self, doc):
+        # special case where there are multiple ctx and single continuation
+        pronoun_loc = doc["sentence"].index("_")
+
+        ctx = []
+        for option in [doc["option1"], doc["option2"]]:
+            ctx.append(doc["sentence"][:pronoun_loc] + option)
+
+        return ctx
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        pronoun_loc = doc["sentence"].index("_") + 1
+        return " " + doc["sentence"][pronoun_loc:].strip()
+
+    def doc_to_label(self, doc):
+        return int(doc["answer"]) - 1
+
+    def doc_to_domain_conditional(self, doc):
+        """same number of domain conditionals as context"""
+        return [doc["option1"], doc["option2"]]
+
+
+class ArcEasy(ICLMultiChoiceTaskDataset):
+    """ArcEasy creates context with "Question: QUESTION\nAnswer:" and sends the choices as continuations
+        space added as prefix to each continuation
+
+    {
+        'question': 'Which technology was developed most recently?',
+        'choices': {'text': ['cellular telephone', 'television', 'refrigerator', 'airplane'],
+        'label': ['A', 'B', 'C', 'D']},
+        'answerKey': 'A'
+    }
+    """
+
+    metric_type = "acc"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="ai2_arc",
+        dataset_name="ARC-Easy",
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def doc_to_text(self, doc):
+        return "Question: " + doc["question"] + "\nAnswer:"
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        return [" " + choice for choice in doc["choices"]["text"]]
+
+    def doc_to_label(self, doc):
+        # some doc["answerKey"] are stored as numbers
+        num_to_letter = {"1": "A", "2": "B", "3": "C", "4": "D", "5": "E"}
+
+        if doc["answerKey"] in num_to_letter:
+            doc["answerKey"] = num_to_letter[doc["answerKey"]]
+
+        return ["A", "B", "C", "D", "E"].index(doc["answerKey"])
+
+    def doc_to_domain_conditional(self, doc):
+        del doc
+        return "Answer:"
+
+class SocialIQa(ICLMultiChoiceTaskDataset):
+    """SocialIQa
+    Example:
+    {'context': 'Jordan was in charge of taking the food on the camping trip and left all the food at home.',
+     'question': 'How would Jordan feel afterwards?',
+     'answerA': 'horrible that he let his friends down on the camping trip',
+     'answerB': "happy that he doesn't need to do the cooking on the trip",
+     'answerC': 'very proud and accomplished about the camping trip', 'label': '1'}
+    """
+
+    metric_type = "len_norm"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="social_i_qa",
+        dataset_name=None,
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def doc_to_text(self, doc):
+        return "Question: " + doc["context"] + " " + doc["question"] + "\nAnswer:"
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        return [
+            " " + doc["answerA"],
+            " " + doc["answerB"],
+            " " + doc["answerC"],
+        ]
+
+    def doc_to_label(self, doc):
+        return int(doc["label"]) - 1
+
+    def doc_to_domain_conditional(self, doc):
+        return "Answer:"
+
 
 label_to_task_map = {
     "boolq_mc_5shot": (OEEvalTask, {"dataset_path": "boolq", "dataset_name": "mc_5shot", "metric_type": "acc"}),
@@ -391,11 +727,32 @@ label_to_task_map = {
         OEEvalTask,
         {"dataset_path": "boolq", "dataset_name": "val_mc_5shot", "metric_type": "acc"},
     ),
+    "hellaswag_mc_5shot": (
+        OEEvalTask,
+        {"dataset_path": "hellaswag", "dataset_name": "mc_5shot", "metric_type": "acc"},
+    ),
+    "piqa_mc_5shot": (OEEvalTask, {"dataset_path": "piqa", "dataset_name": "mc_5shot", "metric_type": "acc"}),
+    "openbookqa_mc_5shot": (
+        OEEvalTask,
+        {"dataset_path": "openbookqa", "dataset_name": "mc_5shot", "metric_type": "acc"},
+    ),
+    "winogrande_mc_5shot": (
+        OEEvalTask,
+        {"dataset_path": "winogrande", "dataset_name": "mc_5shot", "metric_type": "acc"},
+    ),
+    "arc_easy_mc_5shot": (
+        OEEvalTask,
+        {"dataset_path": "arc_easy", "dataset_name": "mc_5shot", "metric_type": "acc"},
+    ),
+    "csqa_mc_5shot": (OEEvalTask, {"dataset_path": "csqa", "dataset_name": "mc_5shot", "metric_type": "acc"}),
+
 }
 
 
 if __name__ == "__main__":
-    log_path = "results/eval_logs.jsonl"
+    log_path = "eval_logs"
+    if os.path.exists(log_path):
+        os.remove(log_path)
     config = load_cfg()
     print_config(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

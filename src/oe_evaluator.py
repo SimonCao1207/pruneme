@@ -160,7 +160,7 @@ class EvaluateLM:
         # Update metrics.
         evaluator.update_metrics(batch, ce_loss, logits)  # batch includes all keys that the downstream evaluation needs
 
-    def log_metrics_to_file(self, prefix: str, metrics: dict[str, float], filename: str = "metrics.log"):
+    def log_metrics_to_file(self, prefix: str, metrics: dict[str, float], filename: str):
         def format_float(value: float) -> str:
             if value < 0.0001:
                 return str(value)  # scientific notation
@@ -202,7 +202,8 @@ class EvaluateLM:
             # Get final metrics.
             metrics = evaluator.compute_metrics()
             eval_metrics.update(metrics)
-            self.log_metrics_to_file(f"{evaluator.label}", metrics, filename=self.log_file_path)
+            filename = f"results/{self.log_file_path}_{evaluator.label}.log"
+            self.log_metrics_to_file(f"{evaluator.label}", metrics, filename=filename)
 
         del eval_batches
         return eval_metrics
