@@ -1,7 +1,28 @@
 import abc
-from typing import Any, Dict, List, Sequence, Union
-from transformers import PreTrainedTokenizer as Tokenizer
+import logging
+from collections.abc import Sequence
+from typing import Any
+
 import datasets
+import torch
+from torch.utils.data import DataLoader
+from transformers import PreTrainedTokenizer as Tokenizer
+
+from oe_evaluator import EvaluateLM, Evaluator, EvaluatorType
+from oe_metric import ICLMetric
+from src.config import load_cfg
+from utils import load_hf_dataset, load_model_and_tokenizer, load_oe_eval_requests, print_config
+
+log = logging.getLogger(__name__)
+
+# Map from oe-eval metrics to metrics used here
+METRIC_FROM_OE_EVAL = {
+    "acc_raw": "acc",
+    "acc_per_char": "len_norm",
+    "acc_uncond": "pmi_dc",
+    "logits_per_byte": "bpb",
+}
+
 
 class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
     """Only supports zero-shot for now."""
@@ -12,7 +33,7 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         self,
         tokenizer: Tokenizer,
         dataset_path: str,
-        dataset_name: Union[str, Sequence[str], None] = None,
+        dataset_name: str | Sequence[str] | None = None,
         model_ctx_len: int = 2048,
         split="validation",
         metric_type=None,  # Override default metric type
@@ -30,7 +51,7 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
             self.metric_type = metric_type
         self.log_instances = 0  # Set to > 0 to log the first few instances as a sanity check
 
-        self.samples: List[Dict[str, Any]] = []
+        self.samples: list[dict[str, Any]] = []
         dataset_names: Sequence[str | None]
         if isinstance(dataset_name, str) or dataset_name is None:
             dataset_names = [dataset_name]
@@ -186,9 +207,7 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
             cont_byte_lens.append(sample["cont_byte_len"])
 
             queries.append(torch.LongTensor(self.pad_tokens_until_max(sample["query"], max_len=max_query_len)))
-            dc_queries.append(
-                torch.LongTensor(self.pad_tokens_until_max(sample["dc_query"], max_len=max_dc_query_len))
-            )
+            dc_queries.append(torch.LongTensor(self.pad_tokens_until_max(sample["dc_query"], max_len=max_dc_query_len)))
 
             label_ids.append(sample["label_id"])
 
@@ -211,10 +230,10 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
 
         return batch
 
-    def token_encode(self, string: str) -> List[int]:
+    def token_encode(self, string: str) -> list[int]:
         return self.tokenizer.encode(string, add_special_tokens=False)
 
-    def token_decode(self, tokens: List[int]) -> str:
+    def token_decode(self, tokens: list[int]) -> str:
         return self.tokenizer.decode(tokens)
 
     @abc.abstractmethod
@@ -225,7 +244,7 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def doc_to_continuations(self, doc) -> List[str]:
+    def doc_to_continuations(self, doc) -> list[str]:
         """Match EAI eval harness
         returns a list of continuations
         """
@@ -245,6 +264,7 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         del doc
         return " "
 
+
 class OEEvalTask(ICLMultiChoiceTaskDataset):
     """Generic class for OE evaluation tasks"""
 
@@ -252,7 +272,7 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
         self,
         tokenizer: Tokenizer,
         dataset_path: str,
-        dataset_name: Union[str, Sequence[str], None] = None,
+        dataset_name: str | Sequence[str] | None = None,
         model_ctx_len: int = 2048,
         split=None,
         metric_type=None,
@@ -264,7 +284,7 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
         self.model_ctx_len = model_ctx_len
         self.log_instances = 0  # Set to > 0 to log the first few instances as a sanity check
 
-        self.samples: List[Dict[str, Any]] = []
+        self.samples: list[dict[str, Any]] = []
         dataset_names: Sequence[str | None]
         if isinstance(dataset_name, str) or dataset_name is None:
             dataset_names = [dataset_name]
@@ -310,9 +330,9 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
                     continue
                 if doc_id > max_doc_id:
                     max_doc_id = doc_id
-                assert (
-                    request["request_type"] == "loglikelihood"
-                ), f"Unsupported request type: {request['request_type']}"
+                assert request["request_type"] == "loglikelihood", (
+                    f"Unsupported request type: {request['request_type']}"
+                )
 
                 # from EAI harness
                 # how this all works:
@@ -383,8 +403,41 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
     def doc_to_text(self, doc) -> str:
         raise NotImplementedError
 
-    def doc_to_continuations(self, doc) -> List[str]:
+    def doc_to_continuations(self, doc) -> list[str]:
         raise NotImplementedError
 
     def doc_to_label(self, doc) -> int:
         raise NotImplementedError
+
+
+label_to_task_map = {
+    "boolq_mc_5shot": (OEEvalTask, {"dataset_path": "boolq", "dataset_name": "mc_5shot", "metric_type": "acc"}),
+}
+
+if __name__ == "__main__":
+    config = load_cfg()
+    config.dataset_name = "boolq_mc_5shot"
+    print_config(config)
+    model, tokenizer = load_model_and_tokenizer(config)
+    task_class = label_to_task_map[config.dataset_name]
+    if isinstance(task_class, tuple):
+        task_class, task_kwargs = task_class
+    ds_eval_dataset = task_class(tokenizer=tokenizer, model_ctx_len=config.max_length, **task_kwargs)  # type: ignore
+    ds_eval_dataloader = DataLoader(
+        ds_eval_dataset,  # type: ignore
+        batch_size=config.batch_size,
+        collate_fn=ds_eval_dataset.collate_fn,
+        num_workers=0,
+    )
+    metric = ICLMetric(metric_type=ds_eval_dataset.metric_type)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    evaluator = Evaluator(
+        label=config.dataset_name,
+        type=EvaluatorType.downstream,
+        eval_loader=ds_eval_dataloader,
+        eval_metric=metric.to(device),
+    )
+    eval_lm = EvaluateLM(model=model, evaluator=evaluator, device=device)
+    eval_metrics = eval_lm.eval()
+    print(eval_metrics)

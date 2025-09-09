@@ -22,11 +22,16 @@ dependencies = [
     "torch>=2.6.0",
     "scikit-learn>=1.7.1",
     "torchmetrics>=1.8.2",
+    "importlib-resources>=6.5.2",
 ]
 
 
 [tool.setuptools.packages.find]
-include = ["src"]
+include = ["src", "olmo_data*"]
+
+[tool.setuptools.package-data]
+olmo = ["py.typed"]
+olmo_data = ["**"]
 
 [tool.uv]
 package = true
