@@ -1,13 +1,13 @@
 import abc
 import logging
+import re
 from collections.abc import Sequence
-import os
 from typing import Any
 
 import datasets
-import re
 import torch
 from torch.utils.data import DataLoader
+from transformers import AutoModelForCausalLM
 
 from config import Config, EvaluatorConfig
 from oe_evaluator import EvaluateLM, Evaluator
@@ -46,10 +46,9 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         self.dataset_path = dataset_path
         self.dataset_name = dataset_name
         self.model_ctx_len = model_ctx_len
-        self.current_prompt = None
         if metric_type is not None:
             self.metric_type = metric_type
-        self.log_instances = 0  # Set to > 0 to log the first few instances as a sanity check
+        self.log_instances = 1  # Set to > 0 to log the first few instances as a sanity check
 
         self.samples: list[dict[str, Any]] = []
         dataset_names: Sequence[str | None]
@@ -89,6 +88,70 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
                 tokens = tokens[: self.model_ctx_len]
 
             return tokens
+
+    def prep_examples(self):
+        """Append doc_ids to each example so that they are processed together in the metric"""
+        doc_id = 0
+        for doc in self.dataset:
+            # from EAI harness
+            # how this all works:
+            #          CTX      CONT
+            # inp    0 1 2 3|4 5 6 7 8 9   <- last token is deleted by inp[:, :-1]
+            # gpt2    \               \
+            # logits   1 2 3|4 5 6 7 8 9   <- the ctx half gets tossed out by the
+            # cont_toks      4 5 6 7 8 9      [:, -len(continuation_enc):, :self.vocab_size] slice
+
+            continuations = self.doc_to_continuations(doc)
+            label_id = self.doc_to_label(doc)
+            doc_text = self.doc_to_text(doc)
+            ctx = self.token_encode(doc_text)
+            dc = self.token_encode(self.doc_to_domain_conditional(doc))
+            if self.log_instances > 0:
+                self.log_instances -= 1
+                ds_name = self.dataset_name
+                if isinstance(ds_name, list):
+                    ds_name = ds_name[0]
+                log.info(
+                    f"Sample doc from ({self.dataset_path}, {ds_name}:"
+                    + f"\ndoc_text: {doc_text}\ncontinuations: {continuations}"
+                )
+
+            for cont_id, continuation_str in enumerate(continuations):
+                cont_str_len = len(continuation_str) - 1  # continuation contain leading blank
+                cont_byte_len = len(continuation_str[1:].encode("utf-8"))
+                continuation = self.token_encode(continuation_str)
+
+                # query, remove last token from continuation, truncate from left is longer than model ctx length
+                query = ctx + continuation[:-1]
+                query = query[-self.model_ctx_len :]
+                # this will be different from len(ctx) when truncated by model_ctx_len
+                actual_ctx_len = len(query) - len(continuation) + 1
+
+                # get domain conditional query
+                # we don't expect this to be longer than self.model_ctx_len and it won't make sense to truncate from left
+                dc_query = dc + continuation[:-1]
+
+                # form a sample
+                self.samples.append(
+                    {
+                        "doc_id": doc_id,
+                        "cont_id": cont_id,
+                        "ctx": ctx,
+                        "continuation": continuation,
+                        "ctx_len": actual_ctx_len,
+                        "dc_len": len(dc),
+                        "cont_len": len(
+                            continuation
+                        ),  # even if query has last token removed, LM will output same cont len
+                        "cont_str_len": cont_str_len,
+                        "cont_byte_len": cont_byte_len,
+                        "query": query,  # remove last token from continuation
+                        "dc_query": dc_query,
+                        "label_id": label_id,
+                    }
+                )
+
+            doc_id += 1
 
     def collate_fn(self, data):
         # pad to max length
@@ -171,13 +234,6 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         return self.tokenizer.decode(tokens)
 
     @abc.abstractmethod
-    def prep_examples(self):
-        """
-        Prepares self.samples from self.dataset
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def doc_to_text(self, doc) -> str:
         """Match EAI eval harness
         returns a single context string
@@ -222,7 +278,7 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
         self.dataset_path = dataset_path
         self.dataset_name = dataset_name
         self.model_ctx_len = model_ctx_len
-        self.log_instances = 0  # Set to > 0 to log the first few instances as a sanity check
+        self.log_instances = 1  # Set to > 0 to log the first few instances as a sanity check
 
         self.samples: list[dict[str, Any]] = []
         dataset_names: Sequence[str | None]
@@ -349,6 +405,53 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
     def doc_to_label(self, doc) -> int:
         raise NotImplementedError
 
+
+class BoolQ(ICLMultiChoiceTaskDataset):
+    """Prompt: "PASSAGE\nQuestion: QUESTION?\nAnswer:"
+    acc, random at 50% (SuperGLUE)
+    continuation: yes, no
+
+    {
+        'question': 'is ncis new orleans over for the season',
+        'passage': 'NCIS: New Orleans (season 4) -- The fourth season of NCIS: New Orleans premiered on September 26, 2017 on CBS. The series continues to air following Bull, Tuesday at 10:00 p.m. (ET) and contained 24 episodes. The season concluded on May 15, 2018.',
+        'label': 1
+    }
+    """
+
+    metric_type = "acc"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="boolq",
+        dataset_name=None,
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def doc_to_text(self, doc):
+        return doc["passage"] + "\nQuestion: " + doc["question"] + "?\nAnswer:"
+
+    def doc_to_continuations(self, doc):
+        del doc
+        # add spaces in front of continuation
+        return [" yes", " no"]
+
+    def doc_to_label(self, doc):
+        # if doc['answer'] is True, return index of " yes" which is 0
+        if doc["answer"]:
+            return 0
+        else:
+            return 1
+
+    def doc_to_domain_conditional(self, doc):
+        del doc
+        return "Answer:"
+
+
 class PIQA(ICLMultiChoiceTaskDataset):
     """PIQA sends context in the following fashion: "Question: GOAL\nAnswer:"
     space added as prefix to each continuation
@@ -390,6 +493,7 @@ class PIQA(ICLMultiChoiceTaskDataset):
     def doc_to_domain_conditional(self, doc):
         del doc
         return "Answer:"
+
 
 class HellaSwag(ICLMultiChoiceTaskDataset):
     """HellaSwag concats "ACTIVITY_LABEL: CTX_A CTX_B.capitalize()" to form context and then sends endings as continuations
@@ -448,16 +552,21 @@ class HellaSwag(ICLMultiChoiceTaskDataset):
 
         return domain_conditional
 
+
 def build_evaluator(
     cfg: Config,
     eval_cfg: EvaluatorConfig,
     tokenizer,
     device: torch.device,
 ) -> Evaluator:
+    task_kwargs = {}
     task_class = label_to_task_map[eval_cfg.label]
     if isinstance(task_class, tuple):
         task_class, task_kwargs = task_class
-    ds_eval_dataset = task_class(tokenizer=tokenizer, model_ctx_len=cfg.max_length, **task_kwargs)  # type: ignore
+    if task_class is OEEvalTask:
+        ds_eval_dataset = task_class(tokenizer=tokenizer, model_ctx_len=cfg.max_length, **task_kwargs)
+    else:
+        ds_eval_dataset = task_class(tokenizer=tokenizer, **task_kwargs)
     ds_eval_dataloader = DataLoader(
         ds_eval_dataset,  # type: ignore
         batch_size=config.batch_size,
@@ -483,6 +592,7 @@ def build_evaluators(cfg: Config, tokenizer, device: torch.device) -> list[Evalu
         eval_cfg = EvaluatorConfig(**eval_cfg) if isinstance(eval_cfg, dict) else eval_cfg
         evaluators.append(build_evaluator(cfg, eval_cfg, tokenizer, device))
     return evaluators
+
 
 class OpenBookQA(ICLMultiChoiceTaskDataset):
     """OBQA: question_stem is sent as context (no special prompt format) and choices are sent as continuation
@@ -679,6 +789,7 @@ class ArcEasy(ICLMultiChoiceTaskDataset):
         del doc
         return "Answer:"
 
+
 class SocialIQa(ICLMultiChoiceTaskDataset):
     """SocialIQa
     Example:
@@ -721,7 +832,69 @@ class SocialIQa(ICLMultiChoiceTaskDataset):
         return "Answer:"
 
 
+class COPA(ICLMultiChoiceTaskDataset):
+    """Prompt: "PREMISE.strip()[:-1] because/therefore"
+    Req_loglikelihood('The pair of students came under scrutiny by the teacher because', ' the students both received excellent grades.'
+    continuations: CHOICE1/CHOICE2
+
+    "cause": "because",
+    "effect": "therefore",
+
+    implement PMI_DC
+    acc, random at 50%
+
+    {
+        'premise': 'The pair of students came under scrutiny by the teacher.',
+        'choice1': 'The students both received excellent grades.',
+        'choice2': 'Their responses on the assignment were identical.',
+        'question': 'cause',
+        'label': 1
+    }
+    """
+
+    metric_type = "acc"
+
+    def __init__(
+        self,
+        tokenizer,
+        dataset_path="super_glue",
+        dataset_name="copa",
+    ):
+        super().__init__(
+            tokenizer=tokenizer,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+        )
+
+    def doc_to_text(self, doc):
+        connector = "because" if doc["question"] == "cause" else "therefore"
+
+        # remove the period
+        return doc["premise"].strip()[:-1] + " " + connector
+
+    def doc_to_continuations(self, doc):
+        # add spaces in front of continuation
+        def convert_choice(choice):
+            return choice[0].lower() + choice[1:]
+
+        return [" " + convert_choice(doc["choice1"]), " " + convert_choice(doc["choice2"])]
+
+    def doc_to_label(self, doc):
+        return doc["label"]
+
+    def doc_to_domain_conditional(self, doc):
+        return "because" if doc["question"] == "cause" else "therefore"
+
+
 label_to_task_map = {
+    "piqa": PIQA,
+    "hellaswag": HellaSwag,
+    "winogrande": WinoGrande,
+    "openbook_qa": OpenBookQA,
+    "boolq": BoolQ,
+    "arc_easy": ArcEasy,
+    "copa": COPA,
+    "social_iqa": SocialIQa,
     "boolq_mc_5shot": (OEEvalTask, {"dataset_path": "boolq", "dataset_name": "mc_5shot", "metric_type": "acc"}),
     "boolq_val_mc_5shot": (
         OEEvalTask,
@@ -745,19 +918,25 @@ label_to_task_map = {
         {"dataset_path": "arc_easy", "dataset_name": "mc_5shot", "metric_type": "acc"},
     ),
     "csqa_mc_5shot": (OEEvalTask, {"dataset_path": "csqa", "dataset_name": "mc_5shot", "metric_type": "acc"}),
-
 }
 
 
+def _load_base_llama_1B():
+    model_name = "meta-llama/Llama-3.2-1B"
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
+    return model
+
+
 if __name__ == "__main__":
-    log_path = "eval_logs"
-    if os.path.exists(log_path):
-        os.remove(log_path)
     config = load_cfg()
     print_config(config)
+    log_dir = "Llama-3.2-1B" if len(config.prune_layers) == 0 else f"prune_{'_'.join(map(str, config.prune_layers))}"
+    log.info(f"Logging to {log_dir}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, tokenizer = load_model_and_tokenizer(config)
+    llama_based_model = _load_base_llama_1B()
     evaluators = build_evaluators(config, tokenizer, device)
-    eval_lm = EvaluateLM(model=model, evaluators=evaluators, log_path=log_path, device=device)
+    # eval_lm = EvaluateLM(model=model, evaluators=evaluators, log_dir=log_dir, device=device)
+    eval_lm = EvaluateLM(model=llama_based_model, evaluators=evaluators, log_dir=log_dir, device=device)
     eval_metrics = eval_lm.eval()
     print(eval_metrics)

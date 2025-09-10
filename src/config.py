@@ -1,6 +1,6 @@
 # config.py
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from omegaconf import OmegaConf
@@ -52,7 +52,7 @@ class Config:
     num_layers_to_skip: int = 1
 
     # For method "prune-multiple"
-    prune_layers: list[int] | None = None
+    prune_layers: list[int] = field(default_factory=list)
 
     # For method taylor and magnitude
     weight_reduction: str = "sum"  # sum, mean, max, prod

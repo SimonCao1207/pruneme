@@ -1,4 +1,5 @@
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -91,14 +92,13 @@ class Evaluator:
 
 
 class EvaluateLM:
-    def __init__(
-        self, model: torch.nn.Module, evaluators: list[Evaluator], log_path: str, device: torch.device
-    ) -> None:
+    def __init__(self, model: torch.nn.Module, evaluators: list[Evaluator], log_dir: str, device: torch.device) -> None:
         self.model = model
         self.evaluators = evaluators
         self.loss_fn = cross_entropy_loss
         self.device = device
-        self.log_file_path = log_path
+        self.log_dir = log_dir
+        os.makedirs(f"results/{self.log_dir}", exist_ok=True)
 
     def get_labels(self, batch: dict[str, Any]) -> torch.Tensor:
         # Labels are just input IDs shifted to the left (first item is ignored).
@@ -202,7 +202,7 @@ class EvaluateLM:
             # Get final metrics.
             metrics = evaluator.compute_metrics()
             eval_metrics.update(metrics)
-            filename = f"results/{self.log_file_path}_{evaluator.label}.log"
+            filename = f"results/{self.log_dir}/{evaluator.label}.log"
             self.log_metrics_to_file(f"{evaluator.label}", metrics, filename=filename)
 
         del eval_batches

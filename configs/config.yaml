@@ -6,10 +6,17 @@ revision: pico-epoch_0
 batch_size: 16
 max_length: 2048
 device: cuda
-prune_layers: [6]
+prune_layers: []
 method: prune-multiple
 evaluators:
-  - label: boolq_mc_5shot 
+  - label: piqa 
+  - label: hellaswag 
+  - label: winogrande 
+  - label: openbook_qa 
+  - label: boolq 
+  - label: arc_easy 
+  - label: copa 
+  - label: social_iqa 
   - label: boolq_val_mc_5shot
   - label: hellaswag_mc_5shot
   - label: piqa_mc_5shot
