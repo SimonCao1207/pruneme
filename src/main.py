@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from config import Config, load_cfg
 from data import get_dataloader
+from model import LlamaForCausalLM
 from utils import angular_distance, load_model_and_tokenizer, print_config
 
 logging.basicConfig(level=logging.INFO)
@@ -204,6 +205,58 @@ def compute_and_save_layer_importance(
     logging.info(f"Layer importance saved to {model_name}_layer_importance.csv")
 
 
+def calculate_and_save_average_hidden_states(
+    config: Config,
+    model: LlamaForCausalLM,
+    dataloader: torch.utils.data.DataLoader,
+    device: str,
+    num_iterations: int | None = None,
+):
+    """
+    Calculates the average hidden state for each layer of the model over a dataset
+    and saves the result to a file.
+    """
+    model.to(device)
+    model.eval()
+    num_layers = model.config.num_hidden_layers
+    hidden_size = model.config.hidden_size
+    sum_of_states = torch.zeros(num_layers + 1, hidden_size, device=device)
+    total_tokens = 0
+
+    print(f"Starting hidden state accumulation on device: {device}")
+
+    with torch.no_grad():
+        for i, batch in enumerate(tqdm(dataloader, desc="Averaging Hidden States")):
+
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+            )
+            hidden_states = outputs.hidden_states
+
+            for layer_idx, layer_tensor in enumerate(hidden_states):
+                masked_tensor = layer_tensor * attention_mask.unsqueeze(-1)
+                sum_of_states[layer_idx] += torch.sum(masked_tensor, dim=(0, 1))
+
+            total_tokens += attention_mask.sum().item()
+
+    if total_tokens == 0:
+        raise ValueError("No tokens were processed. Check dataloader.")
+
+    print(f"Accumulation complete. Total tokens processed: {total_tokens}")
+    averaged_hidden_states_tensor = (sum_of_states / total_tokens).cpu()
+
+    output_path=f"outputs/{config.model_name}/averaged_hidden_states.pt"
+    os.makedirs(output_path, exist_ok=True)
+    torch.save(averaged_hidden_states_tensor, output_path)
+    print(f"Average hidden states tensor saved to: {output_path}")
+    return averaged_hidden_states_tensor
+
+
 def main(config):
     print_config(config)
 
@@ -213,12 +266,20 @@ def main(config):
     dataloader = get_dataloader(config)
 
     if config.method == "similarity-based":
-        compute_and_save_layer_distances(
-            model,
-            tokenizer,
-            dataloader,
+        calculate_and_save_average_hidden_states(
             config,
+            model=model,
+            dataloader=dataloader,
+            device=config.device,
+            num_iterations=None,
         )
+
+        # compute_and_save_layer_distances(
+        #     model,
+        #     tokenizer,
+        #     dataloader,
+        #     config,
+        # )
     else:
         compute_and_save_layer_importance(
             model,

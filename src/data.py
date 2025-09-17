@@ -35,8 +35,9 @@ def collate_fn(batch, tokenizer):
     return inputs
 
 
-def get_dataloader(config, collate_fn=collate_fn):
-    tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
+def get_dataloader(config, tokenizer=None, collate_fn=collate_fn):
+    if tokenizer is None:
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
     if config.dataset_name == "pico-lm/pretokenized-dolma":
         torch_dataset = PicoDataset(config)
         dataloader = DataLoader(
