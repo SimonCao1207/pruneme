@@ -12,7 +12,6 @@ dependencies = [
     "ipykernel>=6.29.5",
     "pandas>=2.3.0",
     "wandb>=0.21.0",
-    "mergekit",
     "transformers>=4.53.2",
     "pytest>=8.4.1",
     "omegaconf>=2.3.0",
@@ -40,7 +39,6 @@ python-preference = "managed"
 [tool.uv.sources]
 torchvision = { index = "pytorch-cu118" }
 torch = { index = "pytorch-cu118" }
-mergekit = { path = "mergekit", editable = true }
 
 [[tool.uv.index]]
 name = "pytorch-cu118"

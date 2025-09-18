@@ -250,8 +250,9 @@ def calculate_and_save_average_hidden_states(
     print(f"Accumulation complete. Total tokens processed: {total_tokens}")
     averaged_hidden_states_tensor = (sum_of_states / total_tokens).cpu()
 
-    output_path=f"outputs/{config.model_name}/averaged_hidden_states.pt"
-    os.makedirs(output_path, exist_ok=True)
+    output_dir=f"outputs/{config.model_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "average_hidden_states.pt")
     torch.save(averaged_hidden_states_tensor, output_path)
     print(f"Average hidden states tensor saved to: {output_path}")
     return averaged_hidden_states_tensor
@@ -263,7 +264,7 @@ def main(config):
     model, tokenizer = load_model_and_tokenizer(config)
     model.eval()
 
-    dataloader = get_dataloader(config)
+    dataloader = get_dataloader(config, tokenizer)
 
     if config.method == "similarity-based":
         calculate_and_save_average_hidden_states(
