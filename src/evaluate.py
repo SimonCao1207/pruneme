@@ -12,8 +12,9 @@ from src.config import Config, load_cfg
 from src.data import get_dataloader
 from src.utils import load_model_and_tokenizer, print_config
 
+torch.set_float32_matmul_precision("high")
+
 logging.basicConfig(level=logging.INFO)
-torch.cuda.empty_cache()
 
 
 def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
@@ -46,9 +47,6 @@ def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
 
             total_loss += loss.item() * num_tokens
             total_tokens += num_tokens
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
 
     avg_loss = total_loss / total_tokens
     perplexity = math.exp(avg_loss)
@@ -95,14 +93,15 @@ def save_results(output_file, output_info):
 def get_prune_layers(config: Config) -> list[int]:
     dir_name = f"outputs/{config.model_name}/{config.method}/{config.dataset_name}"
     num_skips = config.num_layers_to_skip
-    if config.method == "simialrity-based":
+    if config.method == "similarity-based":
         csv_file = f"{dir_name}/similarity_matrix.csv"
         df = pd.read_csv(csv_file, index_col=0)
         prune_layers = df.idxmax(axis=1).to_list()
         if num_skips < len(prune_layers) and num_skips > 0:
             prune_layers = prune_layers[:num_skips]
+            prune_layers = [int(x) for x in prune_layers]
         else:
-            assert True
+            assert False
 
     elif config.method == "taylor" or config.method == "magnitude":
         csv_file = f"{dir_name}/block_order_L1.csv"
@@ -121,6 +120,7 @@ def get_prune_layers(config: Config) -> list[int]:
     return prune_layers
 
 
+@torch.no_grad()
 def evaluate_downstream(model, tokenizer, config: Config, device: torch.device):
     prune_layers = get_prune_layers(config)
     assert len(prune_layers) < config.num_layers and len(prune_layers) > 0
@@ -130,7 +130,7 @@ def evaluate_downstream(model, tokenizer, config: Config, device: torch.device):
     eval_metrics = eval_lm.eval()
     logging.info(f"Downstream evaluation results: {eval_metrics}")
     out_dir = f"results/{config.method}/{config.dataset_name}"
-    output_file = f"{out_dir}/{config.model_name}_{'_'.join(map(str, config.prune_layers))}.json"
+    output_file = f"{out_dir}/{config.model_name.split('-')[0]}_{'_'.join(map(str, prune_layers))}.json"
     save_results(output_file, eval_metrics)
 
 
@@ -139,6 +139,7 @@ if __name__ == "__main__":
     print_config(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, tokenizer = load_model_and_tokenizer(config)
+    model = torch.compile(model)
     dataloader = get_dataloader(config)
     # evaluate(model, tokenizer, dataloader, dataset_name, config)
     evaluate_downstream(model, tokenizer, config, device)

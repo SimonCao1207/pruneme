@@ -64,7 +64,10 @@ def get_dataloader(config, tokenizer=None, collate_fn=collate_fn):
             ds_eval_dataset,  # type: ignore
             batch_size=config.batch_size,
             collate_fn=ds_eval_dataset.collate_fn,
-            num_workers=0,
+            num_workers=2,
+            prefetch_factor=2,
+            shuffle=False,
+            pin_memory=True,
         )
     return dataloader
 

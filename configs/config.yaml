@@ -3,7 +3,7 @@ model_name: Full-3.2-16L
 num_layers: 16
 dataset_name: boolq
 revision: pico-epoch_0
-batch_size: 8
+batch_size: 64
 max_length: 2048
 device: cuda
 prune_layers: []
