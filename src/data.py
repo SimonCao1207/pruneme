@@ -5,6 +5,7 @@ from transformers import AutoTokenizer
 from transformers.data.data_collator import DataCollatorForLanguageModeling
 
 from src.config import Config
+from src.oe_downstream import OEEvalTask, label_to_task_map
 
 
 class PicoDataset(IterableDataset):
@@ -38,7 +39,7 @@ def collate_fn(batch, tokenizer):
 def get_dataloader(config, tokenizer=None, collate_fn=collate_fn):
     if tokenizer is None:
         tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
-    if config.dataset_name == "pico-lm/pretokenized-dolma":
+    if config.dataset_name == "pico":
         torch_dataset = PicoDataset(config)
         dataloader = DataLoader(
             torch_dataset,
@@ -51,7 +52,20 @@ def get_dataloader(config, tokenizer=None, collate_fn=collate_fn):
     elif config.dataset_name == "wikitext":
         dataloader = _get_dataloader_wikitext(tokenizer, config.batch_size)
     else:
-        raise ValueError(f"Unsupported dataset: {config.dataset_name}")
+        task_kwargs = {}
+        task_class = label_to_task_map[config.dataset_name]
+        if isinstance(task_class, tuple):
+            task_class, task_kwargs = task_class
+        if task_class is OEEvalTask:
+            ds_eval_dataset = task_class(tokenizer=tokenizer, model_ctx_len=config.max_length, **task_kwargs)
+        else:
+            ds_eval_dataset = task_class(tokenizer=tokenizer, **task_kwargs)
+        dataloader = DataLoader(
+            ds_eval_dataset,  # type: ignore
+            batch_size=config.batch_size,
+            collate_fn=ds_eval_dataset.collate_fn,
+            num_workers=0,
+        )
     return dataloader
 
 

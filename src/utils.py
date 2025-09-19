@@ -52,24 +52,21 @@ def move_to_device(o: T, device: torch.device) -> T:
 
 
 def load_model_and_tokenizer(config: Config):
-    if config.method == "prune-multiple":
+    if config.model_path.startswith("huzama"):
         model = LlamaForCausalLM.from_pretrained(
             config.model_path,
             torch_dtype=torch.float32,
             revision=config.revision,
         ).to(config.device)
+        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
     else:
         model = AutoModelForCausalLM.from_pretrained(
             config.model_path,
             torch_dtype=torch.float32,
             revision=config.revision,
         ).to(config.device)
-
-    if config.model_name.startswith("huzama"):
-        tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-0724-hf")
-    else:
-        print("Loading tokenizer from model path:", config.model_path)
         tokenizer = AutoTokenizer.from_pretrained(config.model_path)
+
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer

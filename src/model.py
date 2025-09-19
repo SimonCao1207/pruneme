@@ -616,13 +616,12 @@ class LlamaModel(LlamaPreTrainedModel):
                     raise ValueError(
                         f"Unsupported number of hidden layers {self.config.num_hidden_layers} for virtual layers."
                     )
-
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             for _ in range(self.layer_reps[layer_idx]):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
                 if drop_layer_ids is not None and self.training is False and layer_idx in drop_layer_ids:
-                    logger.info(f"Skipping layer {layer_idx} during forward pass.")
+                    logger.info(f"Skipping layer {layer_idx}")
                     continue
 
                 if self.gradient_checkpointing and self.training:

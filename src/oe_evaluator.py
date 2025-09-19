@@ -1,5 +1,4 @@
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -92,13 +91,18 @@ class Evaluator:
 
 
 class EvaluateLM:
-    def __init__(self, model: torch.nn.Module, evaluators: list[Evaluator], log_dir: str, device: torch.device) -> None:
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        evaluators: list[Evaluator],
+        device: torch.device,
+        prune_layers: list[int] | None,
+    ) -> None:
         self.model = model
         self.evaluators = evaluators
         self.loss_fn = cross_entropy_loss
         self.device = device
-        self.log_dir = log_dir
-        os.makedirs(f"results/{self.log_dir}", exist_ok=True)
+        self.prune_layers = [] if prune_layers is None else prune_layers
 
     def get_labels(self, batch: dict[str, Any]) -> torch.Tensor:
         # Labels are just input IDs shifted to the left (first item is ignored).
@@ -120,13 +124,23 @@ class EvaluateLM:
         self, batch: dict[str, Any], loss_reduction: str = "mean", compute_z_loss: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
         # shape: (batch_size, seq_len, vocab_size)
-        logits = self.model(
-            input_ids=batch["input_ids"],
-            attention_mask=batch.get("attention_mask"),
-            attention_bias=batch.get("attention_bias"),
-            doc_lens=batch.get("doc_lens"),
-            max_doc_lens=batch.get("max_doc_lens"),
-        ).logits
+        if len(self.prune_layers) > 0:
+            logits = self.model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch.get("attention_mask"),
+                attention_bias=batch.get("attention_bias"),
+                doc_lens=batch.get("doc_lens"),
+                max_doc_lens=batch.get("max_doc_lens"),
+                drop_layer_ids=self.prune_layers,
+            ).logits
+        else:
+            logits = self.model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch.get("attention_mask"),
+                attention_bias=batch.get("attention_bias"),
+                doc_lens=batch.get("doc_lens"),
+                max_doc_lens=batch.get("max_doc_lens"),
+            ).logits
         logits_for_loss = logits[..., :-1, :].contiguous()
         # shape: (batch_size * seq_len, vocab_size)
         logits_for_loss = logits_for_loss.view(-1, logits_for_loss.size(-1))
@@ -160,7 +174,7 @@ class EvaluateLM:
         # Update metrics.
         evaluator.update_metrics(batch, ce_loss, logits)  # batch includes all keys that the downstream evaluation needs
 
-    def log_metrics_to_file(self, prefix: str, metrics: dict[str, float], filename: str):
+    def log_metrics(self, prefix: str, metrics: dict[str, float]):
         def format_float(value: float) -> str:
             if value < 0.0001:
                 return str(value)  # scientific notation
@@ -180,8 +194,7 @@ class EvaluateLM:
             for name, value in metrics.items()
             if name == "optim/total_grad_norm" or not name.startswith("optim/")
         ]
-        with open(filename, "a") as f:
-            f.write(f"{prefix}\n" + "\n".join(lines) + "\n")
+        logging.info(f"{prefix}\n" + "\n".join(lines) + "\n")
 
     def eval(self):
         eval_metrics = {}
@@ -202,8 +215,7 @@ class EvaluateLM:
             # Get final metrics.
             metrics = evaluator.compute_metrics()
             eval_metrics.update(metrics)
-            filename = f"results/{self.log_dir}/{evaluator.label}.log"
-            self.log_metrics_to_file(f"{evaluator.label}", metrics, filename=filename)
+            self.log_metrics(f"{evaluator.label}", metrics)
 
         del eval_batches
         return eval_metrics

@@ -13,18 +13,19 @@ def main():
     config = load_cfg()
     print_config(config)
     model, tokenizer = load_model_and_tokenizer(config)
-    os.makedirs(f"outputs/{config.model_name}/{config.method}", exist_ok=True)
+    output_dir = f"outputs/{config.model_name}/{config.method}/{config.dataset_name}"
+    os.makedirs(output_dir, exist_ok=True)
 
     norm_power = 1
 
-    salience_save_path = f"outputs/{config.model_name}/{config.method}/salience_dict_{config.method}_L{norm_power}.pt"
+    salience_save_path = f"{output_dir}/salience_dict_{config.method}_L{norm_power}.pt"
     salience_dict = load_salience_dict(salience_save_path, model, config)
 
-    result_csv_weight = f"outputs/{config.model_name}/{config.method}/weight_score_L{norm_power}.csv"
-    result_csv_block = f"outputs/{config.model_name}/{config.method}/block_score_all_L{norm_power}.csv"
-    result_csv_block_detail = f"outputs/{config.model_name}/{config.method}/block_score_all_detail_L{norm_power}.csv"
-    result_csv_block_sort = f"outputs/{config.model_name}/{config.method}/block_score_sorted_L{norm_power}.csv"
-    block_order_path = f"outputs/{config.model_name}/{config.method}/block_order_L{norm_power}.csv"
+    result_csv_weight = f"{output_dir}/weight_score_L{norm_power}.csv"
+    result_csv_block = f"{output_dir}/block_score_all_L{norm_power}.csv"
+    result_csv_block_detail = f"{output_dir}/block_score_all_detail_L{norm_power}.csv"
+    result_csv_block_sort = f"{output_dir}/block_score_sorted_L{norm_power}.csv"
+    block_order_path = f"{output_dir}/block_order_L{norm_power}.csv"
     block_info = {}
     with open(result_csv_weight, "w") as logfile:
         logwriter = csv.writer(logfile, delimiter=",")
@@ -122,6 +123,8 @@ def load_salience_dict(path, model, config):
                 salience = (param * param.grad).detach().cpu().float()
             elif config.method == "magnitude":
                 salience = param.detach().cpu().float()
+            else:
+                raise ValueError(f"Unknown method: {config.method}")
             if salience_dict[k] is None:
                 salience_dict[k] = salience.clone()
             else:

@@ -48,7 +48,7 @@ class ICLMultiChoiceTaskDataset(metaclass=abc.ABCMeta):
         self.model_ctx_len = model_ctx_len
         if metric_type is not None:
             self.metric_type = metric_type
-        self.log_instances = 1  # Set to > 0 to log the first few instances as a sanity check
+        self.log_instances = 0  # Set to > 0 to log the first few instances as a sanity check
 
         self.samples: list[dict[str, Any]] = []
         dataset_names: Sequence[str | None]
@@ -278,7 +278,7 @@ class OEEvalTask(ICLMultiChoiceTaskDataset):
         self.dataset_path = dataset_path
         self.dataset_name = dataset_name
         self.model_ctx_len = model_ctx_len
-        self.log_instances = 1  # Set to > 0 to log the first few instances as a sanity check
+        self.log_instances = 0  # Set to > 0 to log the first few instances as a sanity check
 
         self.samples: list[dict[str, Any]] = []
         dataset_names: Sequence[str | None]
@@ -569,7 +569,7 @@ def build_evaluator(
         ds_eval_dataset = task_class(tokenizer=tokenizer, **task_kwargs)
     ds_eval_dataloader = DataLoader(
         ds_eval_dataset,  # type: ignore
-        batch_size=config.batch_size,
+        batch_size=cfg.batch_size,
         collate_fn=ds_eval_dataset.collate_fn,
         num_workers=0,
     )
@@ -589,8 +589,11 @@ def build_evaluators(cfg: Config, tokenizer, device: torch.device) -> list[Evalu
     evaluators = []
     assert cfg.evaluators is not None
     for eval_cfg in cfg.evaluators:
-        eval_cfg = EvaluatorConfig(**eval_cfg) if isinstance(eval_cfg, dict) else eval_cfg
-        evaluators.append(build_evaluator(cfg, eval_cfg, tokenizer, device))
+        label = eval_cfg["label"]
+        if label.split("_")[0] == cfg.dataset_name:
+            logging.info(f"Building evaluator for {label}")
+            eval_cfg = EvaluatorConfig(**eval_cfg) if isinstance(eval_cfg, dict) else eval_cfg
+            evaluators.append(build_evaluator(cfg, eval_cfg, tokenizer, device))
     return evaluators
 
 
@@ -930,13 +933,11 @@ def _load_base_llama_1B():
 if __name__ == "__main__":
     config = load_cfg()
     print_config(config)
-    log_dir = "Llama-3.2-1B" if len(config.prune_layers) == 0 else f"prune_{'_'.join(map(str, config.prune_layers))}"
-    log.info(f"Logging to {log_dir}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, tokenizer = load_model_and_tokenizer(config)
     llama_based_model = _load_base_llama_1B()
     evaluators = build_evaluators(config, tokenizer, device)
-    # eval_lm = EvaluateLM(model=model, evaluators=evaluators, log_dir=log_dir, device=device)
-    eval_lm = EvaluateLM(model=llama_based_model, evaluators=evaluators, log_dir=log_dir, device=device)
+    # eval_lm = EvaluateLM(model=model, evaluators=evaluators, device=device)
+    eval_lm = EvaluateLM(model=llama_based_model, evaluators=evaluators, device=device, prune_layers=None)
     eval_metrics = eval_lm.eval()
     print(eval_metrics)

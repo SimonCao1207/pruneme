@@ -38,7 +38,7 @@ class Config:
     num_layers: int = 8
 
     # Dataset config
-    dataset_name: str = "pico-lm/pretokenized-dolma"
+    dataset_name: str = "pico"
     batch_size: int = 8
     max_length: int = 2048
     dataset_column: str | None = None
@@ -48,10 +48,9 @@ class Config:
     revision: str = "main"
 
     # Prune config
-    method: str = "normal"  # normal | similarity-based | prune-multiple | taylor | magnitude
+    method: str = "prune-last"  # normal | similarity-based | prune-multiple | taylor | magnitude
     num_layers_to_skip: int = 1
 
-    # For method "prune-multiple"
     prune_layers: list[int] = field(default_factory=list)
 
     # For method taylor and magnitude

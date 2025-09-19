@@ -25,7 +25,7 @@ def get_prune_layers(config: Config):
 
 
 def get_prune_blocks(config: Config):
-    if config.method == "normal":
+    if config.method == "prune-last":
         first_block = [0, config.num_layers - config.num_layers_to_skip]
         second_block = [
             config.num_layers - config.num_layers_to_skip,
