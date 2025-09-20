@@ -17,13 +17,14 @@ torch.set_float32_matmul_precision("high")
 logging.basicConfig(level=logging.INFO)
 
 
-def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
+def evaluate(model, tokenizer, dataloader, config: Config):
     model.eval()
     total_loss = 0.0
     total_tokens = 0
+    prune_layers = get_prune_layers(config)
 
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc=f"Evaluating {dataset_name}"):
+        for batch in tqdm(dataloader, desc=f"Evaluating {config.dataset_name}"):
             input_ids = batch["input_ids"].to(model.device)
             attention_mask = batch.get("attention_mask", None)
             if attention_mask is not None:
@@ -33,7 +34,7 @@ def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
                 outputs = model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
-                    drop_layer_ids=config.prune_layers,
+                    drop_layer_ids=prune_layers,
                     labels=input_ids,
                 )
             else:
@@ -58,23 +59,10 @@ def evaluate(model, tokenizer, dataloader, dataset_name, config: Config):
         "average_loss": avg_loss,
     }
 
-    if hasattr(config, "model_name") and config.model_name:
-        model_name = config.model_name
-    else:
-        model_name = os.path.basename(os.path.dirname(config.model_path))
-
     print(f"Model path: {config.model_path}")
-    out_dir = f"results/{dataset_name}/{config.method}"
-    if config.method == "prune-last":
-        output_info.update({"num_layers_to_skip": config.num_layers_to_skip})
-        if config.num_layers_to_skip > 0:
-            output_file = f"results/{dataset_name}/{config.method}/{model_name}_{config.num_layers_to_skip}.json"
-        else:
-            output_file = f"results/{dataset_name}/{model_name}.json"
-    else:
-        assert len(config.prune_layers) > 0
-        output_info.update({"prune_layers": config.prune_layers})
-        output_file = f"{out_dir}/{model_name}_{'_'.join(map(str, config.prune_layers))}.json"
+    out_dir = f"results/{config.method}/{config.dataset_name}"
+    output_info.update({"prune_layers": prune_layers})
+    output_file = f"{out_dir}/{config.model_name.split('-')[0]}_{'_'.join(map(str, prune_layers))}.json"
 
     print(f"Perplexity: {perplexity:.4f}")
 
@@ -117,7 +105,6 @@ def get_prune_layers(config: Config) -> list[int]:
         num_layer_to_skip = config.num_layers_to_skip
         prune_layers = prune_layers[: num_layers - num_layer_to_skip]
     elif config.method == "gap":
-        print("here, ", num_skips)
         prune_layers = [13, 12, 14, 11, 10, 8, 7, 9]
         prune_layers = prune_layers[:num_skips]
     return prune_layers
@@ -147,5 +134,7 @@ if __name__ == "__main__":
     model, tokenizer = load_model_and_tokenizer(config)
     model = torch.compile(model)
     dataloader = get_dataloader(config)
-    # evaluate(model, tokenizer, dataloader, dataset_name, config)
-    evaluate_downstream(model, tokenizer, config, device)
+    if config.dataset_name in ["pico", "wikitext"]:
+        evaluate(model, tokenizer, dataloader, config)
+    else:
+        evaluate_downstream(model, tokenizer, config, device)

@@ -590,7 +590,8 @@ def build_evaluators(cfg: Config, tokenizer, device: torch.device) -> list[Evalu
     assert cfg.evaluators is not None
     for eval_cfg in cfg.evaluators:
         label = eval_cfg["label"]
-        if label.split("_")[0] == cfg.dataset_name:
+        dataset_name = cfg.dataset_name.split("_")[0]
+        if label.split("_")[0] == dataset_name:
             logging.info(f"Building evaluator for {label}")
             eval_cfg = EvaluatorConfig(**eval_cfg) if isinstance(eval_cfg, dict) else eval_cfg
             evaluators.append(build_evaluator(cfg, eval_cfg, tokenizer, device))

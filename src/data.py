@@ -11,7 +11,7 @@ from src.oe_downstream import OEEvalTask, label_to_task_map
 class PicoDataset(IterableDataset):
     def __init__(self, config: Config):
         self.args = config
-        self.dataset = load_dataset(config.dataset_name, split="train", streaming=True)
+        self.dataset = load_dataset("pico-lm/pretokenized-dolma", split="train", streaming=True)
         val_size = 64 * 20
         self.dataset = self.dataset.take(val_size)
 
