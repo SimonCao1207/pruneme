@@ -8,7 +8,7 @@ max_length: 2048
 device: cuda
 prune_layers: []
 num_layers_to_skip: 1
-method: taylor
+method: similarity-based
 evaluators:
   - label: piqa 
   - label: hellaswag 
@@ -21,7 +21,7 @@ evaluators:
   - label: boolq_val_mc_5shot
   - label: hellaswag_mc_5shot
   - label: piqa_mc_5shot
-  - label: openbookqa_mc_5shot
+  - label: openbook_qa_mc_5shot
   - label: winogrande_mc_5shot
   - label: arc_easy_mc_5shot
   - label: csqa_mc_5shot

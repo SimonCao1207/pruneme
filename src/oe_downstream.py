@@ -909,7 +909,7 @@ label_to_task_map = {
         {"dataset_path": "hellaswag", "dataset_name": "mc_5shot", "metric_type": "acc"},
     ),
     "piqa_mc_5shot": (OEEvalTask, {"dataset_path": "piqa", "dataset_name": "mc_5shot", "metric_type": "acc"}),
-    "openbookqa_mc_5shot": (
+    "openbook_qa_mc_5shot": (
         OEEvalTask,
         {"dataset_path": "openbookqa", "dataset_name": "mc_5shot", "metric_type": "acc"},
     ),

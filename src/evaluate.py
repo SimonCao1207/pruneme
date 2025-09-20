@@ -81,6 +81,8 @@ def save_results(output_file, output_info):
 def get_prune_layers(config: Config) -> list[int]:
     dir_name = f"outputs/{config.model_name}/{config.method}/{config.dataset_name}"
     num_skips = config.num_layers_to_skip
+    if num_skips == 0:
+        return []
     if config.method == "similarity-based":
         csv_file = f"{dir_name}/similarity_matrix.csv"
         df = pd.read_csv(csv_file, index_col=0)
@@ -137,4 +139,4 @@ if __name__ == "__main__":
     if config.dataset_name in ["pico", "wikitext"]:
         evaluate(model, tokenizer, dataloader, config)
     else:
-        evaluate_downstream(model, tokenizer, config, device)
+        evaluate_downstream(model, tokenizer, config, device, full=config.num_layers_to_skip == 0)
