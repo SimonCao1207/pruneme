@@ -111,19 +111,25 @@ def get_prune_layers(config: Config) -> list[int]:
             prune_layers = prune_layers[:num_skips]
         else:
             assert True
-
     elif config.method == "prune-last":
         num_layers = config.num_layers
         prune_layers = list(range(num_layers))
         num_layer_to_skip = config.num_layers_to_skip
         prune_layers = prune_layers[: num_layers - num_layer_to_skip]
+    elif config.method == "gap":
+        print("here, ", num_skips)
+        prune_layers = [13, 12, 14, 11, 10, 8, 7, 9]
+        prune_layers = prune_layers[:num_skips]
     return prune_layers
 
 
 @torch.no_grad()
-def evaluate_downstream(model, tokenizer, config: Config, device: torch.device):
-    prune_layers = get_prune_layers(config)
-    assert len(prune_layers) < config.num_layers and len(prune_layers) > 0
+def evaluate_downstream(model, tokenizer, config: Config, device: torch.device, full=False):
+    if full:
+        prune_layers = []
+    else:
+        prune_layers = get_prune_layers(config)
+        assert len(prune_layers) < config.num_layers and len(prune_layers) > 0
     logging.info(f"Pruning layers: {prune_layers}")
     evaluators = build_evaluators(config, tokenizer, device)
     eval_lm = EvaluateLM(model=model, evaluators=evaluators, device=device, prune_layers=prune_layers)
